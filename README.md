@@ -24,7 +24,7 @@ Here is the bibtex:
 
 Magma is publicly available throught the [Simons Agreement](http://magma.maths.usyd.edu.au/magma/simons_details).
 
-Sage notebook users may prefer to use a [Jupyter](https://jupyter.org/install) notebook with a [magma kernel](https://github.com/edgarcosta/magma_kernel). Magma.
+Sage notebook users may prefer to use a [Jupyter](https://jupyter.org/install) notebook with a [magma kernel](https://github.com/edgarcosta/magma_kernel).
 
 
 
