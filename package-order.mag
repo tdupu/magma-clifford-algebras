@@ -1,0 +1,1577 @@
+//#########################################
+//#########################################
+//#########################################
+/*
+
+TODO:
+    --O1 eq O2
+    --basis(O)
+    --basis(O)[1] in O
+    --test get_maximal_orders
+    --test get_units_group
+    --add in optional parameters for get_maximal_orders
+    --implement code to order and order to code functionality (needs to test if "gaussian")
+    
+This sort of thing works:
+
+    >d:=2;
+    >cl := clifford(d,Q);
+    >mygens:=[cl.i : i in [1..2^d]];
+    >ord := cliff_order(Z,mygens);
+    >cliff_order("hurwitz")`basis[1] in ord`magma_order;
+    
+This sort of thing also works:
+    
+    >Z:=Integers();
+    >Q:=Rationals();
+    >Attach("package-cliff.mag");
+    >Attach("package-cusp.mag");
+    >Attach("package-order.mag");
+    >Attach("package-modular-symbols.mag");
+    >Attach("package-grpcliff.mag");
+    >d:=3;
+    >cl := clifford(d,Q);
+    >O:=get_maximal_orders(cl)[1];
+    >Ogrp,Ounits,Omat,repn:=units(O);
+    >gens,units_quo,map_quo:=units_fp(O);
+    >vec_units:=get_unit_vectors(O);
+    >v1:=vec_units[1];
+    >map_quo(v1);
+    
+    //Finding a clifford algebra, this is the Hurwitz order
+    d:=3;
+    cl := clifford_algebra(d,Q);
+    O:=get_maximal_orders(cl)[1];
+
+    //The Basis function behaves as it is supposed to
+    O_mag:=get_magma_order(O);
+    Basis(O_mag)[1] eq O_mag.1;
+    basis(O)[1] eq O!O_mag.1;
+
+    //The Order basis is not the clifford algebra basis
+    ord_elt(O,O_mag.1) eq ord_elt(O,cl_mag.1);
+    O_mag.1 eq cl_mag.1;
+
+
+    //We have change of basis functions for this
+    get_order_coordinates(O.1) eq Vector(Eltseq(O.1))*get_change_of_basis_matrix(O);
+
+
+    //The underlying eltseq is the same
+    Eltseq(x) eq Eltseq(y);
+
+
+    //Extensive testing for the types of coordinates and their compatibility
+    dim:=dimension(O);
+    i:=1;
+    j:=2;
+    prod:=(O.i)*(O.j);
+    get_order_coordinates(prod);
+    prod_cl:=cl!( (O.i)*(O.j));
+    prod_mag:=get_magma_elt(prod_cl);
+    prod_mag2:=get_magma_elt(prod);
+    prod_mag eq prod_mag2;
+    coord1:=get_order_coordinates(prod);
+    coord2:=get_order_coordinates(O,prod_cl);
+    coord3:=get_order_coordinates(O,prod_mag);
+    coord2 eq coord3;
+    coord1 eq coord2;
+
+    c:=coord2;
+    b:=basis(O);
+    prod eq &+[c[i]*b[i]: i in [1..#b]];
+
+    //testing coercion
+    O!prod_mag;
+    O!prod_cl;
+
+    //testing products of different types
+    a:=(O.1);
+    b:=(O.2);
+    cl:=get_clifford_algebra(O);
+    a_cl:=cl!a;
+    a_mag:=get_magma_elt(a);
+    a_cl*b eq a_mag*b;
+    b*a_cl eq b*a_mag;
+
+    //Creating New Elements
+    cl:=get_clifford_algebra(O);
+    cl_mag:=get_algebra(cl);
+    x := cl_mag.1;
+    y := New(CliffOrdElt);
+    y`parent := O;
+    y`elt := x;
+    y`seq := Eltseq(x);
+    y eq O!x;
+    
+*/
+//#########################################
+//#########################################
+//#########################################
+
+
+declare type CliffOrd[CliffOrdElt];
+//declare type CliffOrd;
+//declare type CliffOrdElt: CliffAlgElt;
+
+/*
+We want the Parent/Child relationship but also want to CliffOrdElt to automatically be a CliffAlgElt.
+I'm not sure if this is implementable.
+*/
+
+
+//###############################################
+//###############################################
+//###############################################
+//###############################################
+
+declare attributes CliffOrd: all_units, arity, basis, cliff_lat, clifford_algebra, clifford_lattice, clifford_order, clifford_units, closest_vector, cob_matrix, covering_radius, dim, disc, euclidean_algorithm, get_change_of_basis_matrix, get_order_coordinates, get_order_coordinates_fast, get_units_easy, index, is_euclidean, is_maximal, is_norm_euclidean, label, magma_algebra, magma_basis, magma_order, order_lattice, psl2, Qn, repn_units, units_fp_group, units_fp_map, units_gens, units_matrix_group, vec, vec_basis, vec_covering_radius, vec_spc, vec_units, vector_space, Zn, vec_basis;
+
+declare attributes CliffOrdElt: elt,seq,magma_algebra,magma_order, parent;
+
+//deprecate cliff_alg,ord,alg,cliff_lat,vec_spc for clifford_algebra,magma_order, magma_algebra,clifford_lattice,vector_space
+
+//ATTRIBUTE CHANGES
+//alg -> magma_algebra
+//cliff_alg -> clifford_algebra
+//ord -> magma_order
+//dim -> dimension
+//cliff_lat -> clifford_lattice
+//Zn, Qn are deprecated for clifford_lattice, and vector_space
+
+//ATTRIBUTE CHANGES
+//magma_elt
+//magma_algebra
+//magma_order
+//seq->eltseq
+
+Z:=Integers();
+Q:=RationalField();
+
+//###############
+intrinsic clifford_order(r::Rng, b::SeqEnum[CliffAlgElt]) -> CliffOrd
+//#################
+{
+//Should the ring really be an option here for the main constuctor?
+
+    Clifford order from basis
+}
+    order := New(CliffOrd);
+    example_elt:=b[1];
+    //Type(b[1]);
+    cl:=get_magma_algebra(example_elt); //magma AlgClff
+    cl_alg:=Parent(example_elt); //our CliffAlg
+    d:=cl_alg`arity;
+    O:= Order(r,[x`elt: x in b]);
+
+    dim:=#Eltseq(example_elt);
+    cliff_lat := cl_alg`cliff_lat; //cliff_lat
+    vec_spc := cl_alg`vec_spc; //vec_spc
+    order`cliff_lat:=cliff_lat;
+    order`vec_spc:=vec_spc;
+    Qn:=vec_spc;
+    Zn:=cliff_lat;
+
+    //%%%%%%%%%%%%%%%%%%%%%%%%
+    function get_order_coordinates_fast(element)
+    //%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+            cob_matrix:=get_change_of_basis_matrix(O);
+            element := mat[1][2];
+            old_basis:=[cl.i : i in [1..2^d]];
+            new_basis:=[O.i : i in [1..2^d]];
+            new_coord:=get_order_coordinates_fast(element,cob_matrix);
+            element eq &+[new_coord[i]*new_basis[i] : i in [1..2^d]];
+    */
+        cob_matrix:=get_change_of_basis_matrix(order);
+        old_coords := Vector(Eltseq(element));
+        return old_coords * cob_matrix;
+
+    end function;
+
+    //%%%%%%%%%%%%%%%%%%%%%%%%
+    function get_order_coordinates(element)
+    //%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    This is the slow version which computes the change of basis matrix every time.
+
+        INPUT:
+            --element, an element of cl
+            --cl,clifford algebra
+            --O, order in clifford algebra
+            --d, inter such that there are 2^d basis elements
+        OUTPUT:
+            --A tuple of rational numbers that when multiplied by the O basis elements returns our element.
+            
+            magma: element := mat[1][2];
+            magma: new_coords:=get_order_coordinates(element,cl,O,d);
+            magma: new_element:=&+[new_coords[i]*O.i : i in [1..2^d]];
+            magma: new_element eq element;
+            
+            magma: new_coords_of_one:=get_order_coordinates((cl ! 1),cl,O,d);
+            magma: (cl!1) eq &+[new_coords_of_one[i]*O.i : i in [1..2^d]];
+
+    */
+        old_basis := [ cl.i : i in [1..2^d] ];
+        new_basis := [ O.i : i in [1..2^d] ];
+        change_of_basis_matrix := Matrix([ Eltseq(b) : b in new_basis ])^-1;
+        old_coords := Vector(Eltseq(element));
+        new_coords := old_coords * change_of_basis_matrix;
+        return new_coords;
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function closest_vector(x)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        /*
+        INPUT:
+        --x a rational clifford vector
+        --O order in cl
+        --cl clifford algebra
+        --Inds indices of the bases elements for clifford vectors
+        --Zn ambient space
+        --Qn ambient space
+
+        OUTPUT:
+        --cx the element of Vec(O) closest to x.
+
+        EXAMPLE:
+        magma: mygens:=[cl.i : i in [1..8]];
+        magma: ord := Order(Z,mygens); //Lipschitz Order
+        magma: mos := all_max(mygens); //There is a unique maximal order containing the Lipschitz order
+        magma: O:=mos[1];
+        magma: inds:=[ 2^(n)+1 : n in [0..d-1]];
+        magma: I:=[cl.j : j in inds];
+        magma: Inds := Sort(inds cat [1]);
+        magma: Zn := RSpace(Z,#Eltseq(O.1));
+        magma: Qn := RSpace(Q,#Eltseq(O.1));
+        magma: x:=1/2 + I[1] + (3/2)*I[2]-(5/3)*I[3];
+        magma: cx := closest_vector(x);
+        magma: nm(cx-x)[1];
+
+        */
+        assert is_vec(x);
+        den := LCM([Denominator(i): i in Eltseq(d), d in Basis(O)]);
+        subn := sub<Zn|[Zn!Eltseq(den*i): i in Basis(O)]>;
+        Inds:=get_vector_indices(cl_alg);
+        sm := sub<Zn|[Zn.i: i in Inds]>;
+        smeet := subn meet sm; //Vec(O) is the intersection of the order with the clifford vectors
+        xv:=Qn ! Eltseq(den*x);
+        lat := LatticeWithBasis(BasisMatrix(smeet));
+        cvs := ClosestVectors(lat,xv);
+        cx := cl!Eltseq(cvs[1])/den;
+        if not is_vec(cx) then
+        return Error("the result is not a clifford vector");
+        end if;
+        return cx;
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%
+    function get_units_easy( : verbose:=false,bound := 3,find_all := true);
+    //%%%%%%%%%%%%%%%%%%%%%%%%
+        //These need to be turned into optional parameters
+        is_cg:=cl_alg`is_cliff_unit;
+        ord:=O;
+        den := LCM([Denominator(i): i in Eltseq(b), b in Basis(ord)]);
+        //dim := 2^d; //already defined
+        Zd:=cliff_lat;
+        sd := sub<Zd|[Zd|den*i: i in Basis(ord)]>;
+        
+        //---printing---
+        vprintf Clifford,6: "about to do some stuff with the norm function...\n";
+        
+        
+        latamb := LatticeWithGram(DiagonalMatrix([Z!nm(cl!i): i in Basis(cl)]));
+        lat := sub<latamb|Rows(BasisMatrix(sd))>;
+        // lat := LatticeWithBasis(BasisMatrix(sd));
+        smelts := {@&+[c[i]*lat.(Setseq(s)[i]): i in [1..#s]]: c in CartesianPower({-1,1},#s), s in &join [Subsets({1..dim},i): i in [1..bound]]@};
+        sv := {@x: x in smelts|(x,x) eq den^2@};
+        cv := {@cl!Eltseq(v)/den: v in sv@};
+        cunits := {@x: x in cv|Norm(x) ne 0 and is_cg(x)@};
+        repn:=func<x|Matrix([Solution(Matrix(Basis(ord)),Vector(x*y)): y in Basis(ord)])>;
+        matgp := sub<GL(dim,Z)|[repn(x): x in cunits]>;
+        if find_all then
+            i1 := ChangeRing(Solution(Matrix(Basis(ord)),Vector(Q,[i eq 1 select 1 else 0: i in [1..dim]])),Z);
+            assert MinimalPolynomial(ord!Eltseq(i1)) eq Polynomial([-1,1]);
+            all_units := {@&+[v[i]*Basis(ord)[i]: i in [1..dim]] where v is i1*m: m in matgp@};
+        else
+            all_units := cunits;
+        end if;
+        return all_units,cunits,matgp,repn;
+    end function;
+  
+    order`magma_order:=O; //deprecated
+    //order`basis := Basis(O); //shouldn't be precomputed, also this should return clifford order elements
+    order`magma_algebra:=cl;
+    order`clifford_algebra:=Parent(example_elt);
+    order`get_order_coordinates:=get_order_coordinates;
+    order`get_order_coordinates_fast:=get_order_coordinates_fast;
+    order`get_change_of_basis_matrix:=get_change_of_basis_matrix;
+    order`cliff_lat:=cliff_lat; //deprecated
+    order`clifford_lattice:=cliff_lat;
+    order`vec_spc:=vec_spc; // deprecated
+    order`vector_space:=vec_spc;
+    order`arity:=d;
+    order`get_units_easy:=get_units_easy;
+    order`closest_vector:=closest_vector;
+   
+    return order;
+end intrinsic;
+
+//#################
+intrinsic clifford_order(label::MonStgElt) -> CliffOrd
+//#################
+{
+For certain special clifford algebras like the Hurwitz order we are writing special functions.
+}
+    if label eq "hurwitz" then
+        d:=2;
+        cl := clifford_algebra(d,RationalField());
+        mygens:=[cl.i : i in [1..2^d]];
+        O3:= clifford_order(Integers(),mygens);
+        O3`label:="hurwitz";
+        O3`is_norm_euclidean:=true;
+        O3`is_euclidean:=false;
+        O3`euclidean_algorithm:=norm_euclidean_algorithm;
+        //I forget what the covering radius is.
+        return O3;
+    else
+        printf "%o is not a valid order label...",label;
+        return Error();
+    end if;
+    
+end intrinsic;
+
+//#################
+intrinsic clifford_order(cl::CliffAlg) -> CliffOrd
+//#################
+{
+For certain special clifford algebras like the Hurwitz order we are writing special functions.
+}
+    return clifford_order(Z,get_basis(cl));
+end intrinsic;
+
+//#################
+intrinsic Print(c::CliffOrd)
+//#################
+{print}
+  printf "Clifford order in %o", c`clifford_algebra;
+end intrinsic;
+
+//#################
+intrinsic get_vector_space(c::CliffOrd) -> Lat
+//#################
+{
+Get the underlying Q-vector space of the Clifford algebra.
+
+}
+
+    return c`vec_spc;
+
+end intrinsic;
+
+//#################
+intrinsic get_clifford_algebra(c::CliffOrd) -> CliffAlg
+//#################
+{
+Get underlying clifford algebra [CliffAlg].
+}
+    return c`clifford_algebra;
+end intrinsic;
+
+//#################
+intrinsic get_clifford_algebra(c::CliffOrdElt) -> CliffAlg
+//#################
+{
+Get underlying clifford algebra [CliffAlg].
+}
+    return get_clifford_algebra(Parent(c));
+end intrinsic;
+
+//#################
+intrinsic get_magma_algebra(O::CliffOrd) -> AlgClff
+//#################
+{
+Get underlying clifford algebra [CliffAlg].
+}
+    return O`magma_algebra;
+end intrinsic;
+
+//#################
+intrinsic get_magma_algebra(O::CliffOrdElt) -> AlgClff
+//#################
+{
+Get underlying clifford algebra [CliffAlg].
+}
+    if not assigned O`magma_algebra then
+        O`magma_algebra:=O`clifford_algebra`magma_algebra;
+    end if;
+    return O`magma_algebra;
+end intrinsic;
+
+
+//#################
+intrinsic get_cliff_lattice(c::CliffOrd) -> Lat
+//#################
+{
+Get underlying integer lattice of the Clifford order [Lat].
+}
+    return c`cliff_lat;
+end intrinsic;
+
+//#################
+intrinsic get_magma_order(c::CliffOrd) -> AlgAssVOrd
+//#################
+{
+Get underlying magma order
+}
+    return c`magma_order;
+end intrinsic;
+
+//#################
+intrinsic get_magma_order(c::CliffOrdElt) -> AlgAssVOrd
+//#################
+{
+Get underlying magma order
+}
+    return get_magma_order(Parent(c));
+end intrinsic;
+
+//#################
+intrinsic get_change_of_basis_matrix(order::CliffOrd) -> AlgMatElt
+//#################
+{
+Return the change of basis matrix for between the order and the clifford algebra basis.
+
+    For a an order in a magma algebra, I think the correct test is
+        >Eltseq(get_algebra_elt(a) eq Eltseq(a)*cob;
+    
+}
+    if not assigned order`cob_matrix then
+        O_mag:=get_magma_order(order);
+        cl:=get_clifford_algebra(order);
+        d:=get_arity(cl);
+        new_basis:=[O_mag.i : i in [1..2^d]];
+        order`cob_matrix:=Matrix([ Eltseq(b) : b in new_basis ])^(-1);
+    end if;
+    
+    return order`cob_matrix;
+end intrinsic;
+
+
+
+//#################
+intrinsic vec(c::CliffOrd) -> Lat
+//#################
+{
+Given a clifford order return the lattice of clifford vectors.
+}
+    if not assigned c`vec then
+        cl_alg:=get_clifford_algebra(c);
+        O:=get_magma_order(c);
+        Zn:=get_cliff_lattice(c);
+        Qn:=get_vector_space(c);
+        den := LCM([Denominator(i): i in Eltseq(d), d in Basis(O)]);
+        subn := sub<Zn|[Zn!Eltseq(den*i): i in Basis(O)]>;
+        Inds:=get_vector_indices(cl_alg);
+        
+        sm := sub<Zn|[Zn.i: i in Inds]>;
+        smeet := subn meet sm; //Vec(O) is the intersection of the order with the clifford vectors
+        //xv:=Qn ! Eltseq(den*x);
+        lat := LatticeWithBasis(BasisMatrix(smeet));
+        c`vec:=(1/den)*lat;
+    end if;
+    
+    return c`vec;
+end intrinsic;
+
+//###############################
+intrinsic base_ring(O::CliffOrd)->Rng
+//###############################
+{
+    Get the base ring of the order.
+}
+    return BaseRing(get_magma_order(O));
+end intrinsic;
+
+//###############################
+intrinsic get_structure_constants(alpha::CliffOrdElt)->SeqEnum
+//###############################
+{
+    Get the base ring of the order.
+}
+    O:=Parent(alpha);
+    n:=dimension(O);
+    return [Eltseq(get_order_coordinates((alpha)*(O.j))): j in [1..n]];;
+end intrinsic;
+
+//###############################
+intrinsic associative_algebra(O::CliffOrd)->AlgAss,Map
+//###############################
+{
+    Create an associative algebre AlgAss from the structure constants of the integer rings.
+    This is useful for reducing an order modulo a rational prime or a two sided ideal.
+}
+    R:=base_ring(O);
+    n:=dimension(O);
+    Q:=[ get_structure_constants(O.j) : j in [1..n]];
+    O_ass:=AssociativeAlgebra<R,n|Q>;
+    
+    function to_ass_alg(a)
+        coord:=Eltseq(get_order_coordinates(a));
+        return &+[coord[i]*O_ass.i : i in [1..n]];
+    end function;
+    
+    return O_ass,to_ass_alg;
+end intrinsic;
+
+
+//###############################
+intrinsic associative_algebra(O::CliffOrd,m::RngIntElt)->AlgAss,Map
+//###############################
+{
+    Create an associative algebre AlgAss from the structure constants of the integer rings but reduce it modulo a prime.
+}
+    require base_ring(O) eq Z: "this intrinsic is only defined for orders over integer rings";
+    Zm,modm_map:=Integers(m);
+    n:=dimension(O);
+    str_const:=[ get_structure_constants(O.j) : j in [1..n]];
+    O_ass:=AssociativeAlgebra<Zm,n|str_const>;
+    
+    function to_ass_alg(a)
+        coord:=Eltseq(get_order_coordinates(a));
+        return &+[coord[i]*O_ass.i : i in [1..n]];
+    end function;
+    
+    return O_ass,to_ass_alg;
+end intrinsic;
+
+//#################
+intrinsic get_vec_covering_radius(c::CliffOrd) -> FldRatElt
+//#################
+{
+Get the covering radius of the lattice of clifford vectors.
+
+}
+    if not assigned c`vec_covering_radius then
+        L:=vec(c);
+        //we should make a covering_radius attribute...
+        //maybe the lattice Type already has it?
+        r:=CoveringRadius(L);
+        c`vec_covering_radius:=r;
+        return r;
+    else
+        return c`vec_covering_radius;
+    end if;
+    
+end intrinsic;
+
+
+//#################
+intrinsic get_cliff_lattice(c::CliffOrd) -> Lat
+//#################
+{
+Get underlying integer lattice of the Clifford order.
+
+}
+    return c`cliff_lat;
+end intrinsic;
+
+
+
+//#################
+intrinsic vec(c::CliffOrd) -> Lat
+//#################
+{
+Given a clifford order return the lattice of clifford vectors.
+}
+    if not assigned c`vec then
+        cl_alg:=get_clifford_algebra(c);
+        O:=get_magma_order(c);
+        Zn:=get_cliff_lattice(c);
+        Qn:=get_vector_space(c);
+        den := LCM([Denominator(i): i in Eltseq(d), d in Basis(O)]);
+        subn := sub<Zn|[Zn!Eltseq(den*i): i in Basis(O)]>;
+        Inds:=get_vector_indices(cl_alg);
+        
+        sm := sub<Zn|[Zn.i: i in Inds]>;
+        smeet := subn meet sm; //Vec(O) is the intersection of the order with the clifford vectors
+        //xv:=Qn ! Eltseq(den*x);
+        lat := LatticeWithBasis(BasisMatrix(smeet));
+        c`vec:=(1/den)*lat;
+    end if;
+    
+    return c`vec;
+end intrinsic;
+
+
+//#################
+intrinsic get_vec_covering_radius(c::CliffOrd) -> FldRatElt
+//#################
+{
+Get the covering radius of the lattice of clifford vectors.
+
+}
+    if not assigned c`vec_covering_radius then
+        L:=vec(c);
+        //we should make a covering_radius attribute...
+        //maybe the lattice Type already has it?
+        r:=CoveringRadius(L);
+        c`vec_covering_radius:=r;
+        return r;
+    else
+        return c`vec_covering_radius;
+    end if;
+    
+end intrinsic;
+
+intrinsic discriminant(c::CliffOrd) -> RngElt
+{discriminant}
+  if not assigned c`disc then
+    c`disc := Discriminant(get_magma_order(c));
+  end if;
+  return c`disc;
+end intrinsic;
+
+//#################
+intrinsic basis(O::CliffOrd) -> SeqEnum[CliffOrdElt]
+//#################
+{basis of order}
+    if not assigned O`basis then
+        O_mag:=get_magma_order(O);
+        O`basis:=[ord_elt(O,i) : i in Basis(O_mag)];
+    end if;
+    return O`basis;
+end intrinsic;
+
+//#################
+intrinsic get_magma_order(O::CliffOrd) -> Ord
+//#################
+{get magma order}
+    return O`magma_order;
+end intrinsic;
+
+//#################
+intrinsic get_algebra(O::CliffOrd) -> AlgCliff
+//#################
+{get the underlying magma AlgCliff type}
+    return O`magma_algebra;
+end intrinsic;
+
+//#################
+intrinsic get_cliff_algebra(O::CliffOrd) -> CliffAlg
+//#################
+{get the CliffAlg type for this package }
+    return O`clifford_algebra;
+end intrinsic;
+
+//#############################
+intrinsic '.'(X::CliffOrd, n::RngIntElt) -> CliffOrdElt
+//#############################
+{nth generator}
+    return basis(X)[n]; //previously this constructed an element
+end intrinsic;
+
+//#################
+intrinsic get_basis(O::CliffOrd) -> SeqEnum
+//#################
+{Get the basis of a CliffOrd}
+    ord:=get_magma_order(O);
+    basis:=Basis(ord);
+    return [O!v : v in basis];
+end intrinsic;
+
+//#################
+intrinsic dimension(O::CliffOrd) -> AlgCliff
+//#################
+{dimension of the order}
+    if assigned O`dim then
+        return O`dim;
+    else
+        dim:=#Eltseq(O`magma_algebra.1);
+        O`dim:=dim;
+        return O`dim;
+    end if;
+end intrinsic;
+
+
+//##########################################
+//##########################################
+// CliffOrdElt intrinsics
+//##########################################
+//##########################################
+
+//#################
+intrinsic get_cliff_algebra_elt(a:CliffOrdElt) -> CliffAlgElt
+//#################
+{
+Given an element of a clifford order, return the clifford algebra element.
+This is necessary for inverting sometimes.
+}
+    return get_clifford_algebra(a)!a`elt;
+end intrinsic;
+
+//#################
+intrinsic get_clifford_algebra_elt(a:CliffOrdElt) -> CliffAlgElt
+//#################
+{
+Given an element of a clifford order, return the clifford algebra element.
+This is necessary for inverting sometimes. }
+    return get_clifford_algebra(a)!a`elt;
+end intrinsic;
+
+//#################
+intrinsic get_algebra_elt(x::CliffOrdElt) -> AlgClffElt
+//#################
+{Convert and CliffOrdElt into an AlgClffElt}
+    return x`elt;
+end intrinsic;
+
+//#################
+intrinsic get_magma_elt(x::CliffOrdElt) -> AlgClffElt
+//#################
+{Convert and CliffOrdElt into an AlgClffElt}
+    return x`elt; //alias of previous
+end intrinsic;
+
+//#################
+intrinsic Parent(c::CliffOrdElt)->CliffOrd
+//#################
+{Parent CliffOrd associated to CliffOrdElt}
+    return c`parent;
+end intrinsic;
+
+//#################
+intrinsic Print(c::CliffOrdElt)
+//#################
+{print}
+  printf "%o",c`elt; //I removed some formatting
+end intrinsic;
+
+//#################
+intrinsic ord_elt(O::CliffOrd, x::AlgClffElt) -> CliffOrdElt
+//#################
+{make an order element}
+/*
+    All of the coercion O!x goes through this function.
+    All the type handling is handled in IsCoercible.
+*/
+
+    O_mag:=get_magma_order(O);
+    if x in O_mag then
+        y := New(CliffOrdElt);
+        y`parent := O;
+        y`elt := x;
+        y`seq := Eltseq(x); //right now this sequence is the magma sequence in the algebra coordinates not the order coordinates. This maybe should be changed.
+        return y;
+    else
+        error "AlgClffElt %o is not in the magma order. If you are trying to fix this note that all type handling coercion goes through IsCoercible and this intrinsic is only for AlgClffElt types.", x;
+    end if;
+end intrinsic;
+
+
+//#################
+intrinsic 'in'(x::., O::CliffOrd) -> BoolElt, .
+//#################
+{Determine whether a Clifford algebra element belongs to an order.}
+  return IsCoercible(O,x);
+end intrinsic;
+
+//#################
+intrinsic IsCoercible(O::CliffOrd, x::.) -> BoolElt, .
+//#################
+{
+
+First coerce into the CliffAlg object, then check that that the AlgCliffElt is in the corresponding AlgCliffOrd (or whatever magma type Order gives back).
+
+}
+    isc,x_cliff_alg:=IsCoercible(get_clifford_algebra(O),x);
+    if isc then
+        x_alg_cliff:=get_algebra_elt(x_cliff_alg);
+        O_alg_cliff:=get_magma_order(O);
+        if x_alg_cliff in O_alg_cliff then
+            return true, ord_elt(O,x_alg_cliff);
+        else
+            return false,"could not be coerced into the magma AlgCliffOrd."; //replace with formatted string
+        end if;
+    else
+        return false, "could not be coerced into a Clifford algebra let alone the order."; //replace with formatted string
+    end if;
+
+end intrinsic;
+
+//#################
+intrinsic '+'(a::CliffOrdElt, b::CliffOrdElt) -> CliffOrdElt
+//#################
+{sum of order elements}
+  require get_magma_order(a) eq get_magma_order(b): "elements must belong to the same order";
+    a_cl:=get_algebra_elt(a);
+    b_cl:=get_algebra_elt(b);
+  return ord_elt(Parent(a),a_cl+b_cl);
+end intrinsic;
+
+
+//#################
+intrinsic '-'(a::CliffOrdElt, b::CliffOrdElt) -> CliffOrdElt
+//#################
+{difference of order elements}
+  require Parent(b) eq Parent(a): "elements must belong to the same order";
+  return ord_elt(Parent(a),get_algebra_elt(a)-get_algebra_elt(b));
+end intrinsic;
+
+//#################
+intrinsic '-'(a::CliffAlgElt, b::CliffOrdElt) -> CliffAlgElt
+//#################
+{difference of CliffAlgElt and a CliffOrdElt}
+    cl:=Parent(a);
+    return cl!a-cl!b;
+end intrinsic;
+
+//#################
+intrinsic '-'(a::CliffOrdElt, b::CliffAlgElt) -> CliffAlgElt
+//#################
+{The difference of an order elements and an CliffAlgElt}
+    cl:=Parent(b);
+    return cl!a-cl!b;
+end intrinsic;
+
+//#################
+intrinsic '-'(b::CliffOrdElt) -> CliffOrdElt
+//#################
+{
+negation of an order element.
+}
+  return ord_elt(Parent(b),-b`elt);
+end intrinsic;
+
+
+//#################
+intrinsic '*'(a::CliffOrdElt, b::CliffOrdElt) -> CliffOrdElt
+//#################
+{product of order elements}
+  require get_magma_order(a) eq get_magma_order(b): "elements must belong to the same order";
+  return ord_elt(Parent(a),a`elt*b`elt);
+end intrinsic;
+
+//#################
+intrinsic '*'(a::., b::CliffOrdElt) -> .
+//#################
+{
+Product something and CliffOrdElt, this reduces to the CliffAlgElt version.
+}
+    O:=Parent(b);
+    is_in_order,a_ord:=IsCoercible(O,a);
+    if is_in_order then
+        return a_ord*b;
+    else
+        cl:=get_clifford_algebra(O);
+        b_cl:=cl!b;
+        return (cl!a)*(b_cl); // this will raise an error if it can't work
+    end if;
+        
+end intrinsic;
+
+//#################
+intrinsic '*'(b::CliffOrdElt,a::.) -> .
+//#################
+{
+Product something and CliffOrdElt, this reduces to the CliffAlgElt version.
+}
+    O:=Parent(b);
+    is_in_order,a_ord:=IsCoercible(O,a);
+    if is_in_order then
+        return b*a_ord;
+    else
+        cl:=get_clifford_algebra(O);
+        b_cl:=cl!b;
+        return b_cl*(cl!a); // this will raise an error if it can't work
+    end if;
+        
+end intrinsic;
+
+
+//#################
+intrinsic '/'(a::CliffOrdElt, b::CliffOrdElt) -> CliffAlgElt
+//#################
+{product of order elements}
+    cla:=get_clifford_algebra(Parent(a));
+    clb:=get_clifford_algebra(Parent(b));
+    require cla eq clb: "elements must belong to orders in the same algebra";
+    return cliff_elt(cla,a`elt/b`elt);
+end intrinsic;
+
+
+//#################
+intrinsic '^'(a::CliffOrdElt, n::RngIntElt) -> CliffOrdElt
+//#################
+{power of order element}
+    if n ge 0 then
+        return ord_elt(Parent(a),(a`elt)^n);
+    elif n lt 0 then
+        aa:=get_algebra_elt(a);
+        require in_clifford_group(aa): "a must be invertible in its clifford algebra";
+        return get_clifford_algebra(a)!a`elt^n;
+    end if;
+end intrinsic;
+
+//#################
+intrinsic 'eq'(a::CliffOrdElt, b::CliffOrdElt) -> CliffOrdElt
+//#################
+{The equality function for Clifford order elements}
+
+    return (get_algebra_elt(a) eq get_algebra_elt(b));
+
+end intrinsic;
+
+//#################
+intrinsic star(a::CliffOrdElt)->CliffOrdElt
+//#################
+{
+ the star involution for order elements.
+}
+    O:=Parent(a);
+    cl:=get_clifford_algebra(O);
+    return O!star(cl!a); //this will throw an error sometimes and we want it to.
+    
+end intrinsic;
+
+//#################
+intrinsic bar(a::CliffOrdElt)->CliffOrdElt
+//#################
+{
+ the star involution for order elements.
+}
+    O:=Parent(a);
+    cl:=get_clifford_algebra(O);
+    return O!bar(cl!a);
+    
+end intrinsic;
+
+//#################
+intrinsic prime(a::CliffOrdElt)->CliffOrdElt
+//#################
+{
+ the star involution for order elements.
+}
+    O:=Parent(a);
+    cl:=get_clifford_algebra(O);
+    return O!prime(cl!a);
+    
+end intrinsic;
+
+//####################
+intrinsic nm(a:CliffOrdElt)->RngInt
+//####################
+{}
+    cl:=get_clifford_algebra(a);
+    return Eltseq(nm(cl!a))[1];
+    
+end intrinsic;
+
+
+//#############################
+intrinsic Eltseq(x::CliffOrdElt) -> SeqEnum[RngElt]
+//#############################
+{
+The element sequence of a CliffOrdElt is the element sequence of its underlying AlgClffElt
+}
+        
+    return Eltseq(get_magma_elt(x));
+end intrinsic;
+
+
+//#############################
+intrinsic get_order_coordinates(O::CliffOrd,x:: CliffAlgElt) -> SeqEnum[RngElt]
+//#############################
+{
+Given an order in a clifford algebra, the basis for the Clifford algebra and the order may vary. This function will output the coordinates of an element in terms of the basis of the particular order.
+
+    INPUT:
+        --x, an element of a Clifford algebra or order of a Clifford algebra
+    OUTPUT:
+        --seqx, a sequence of elements of the base ring of the clifford algebra
+}
+    require get_magma_algebra(x) eq get_magma_algebra(O): "The CliffAlgElt must be the same as the AlgClff of the order.";
+        
+    return Vector(Eltseq(x))*get_change_of_basis_matrix(O);
+end intrinsic;
+
+//#############################
+intrinsic get_order_coordinates(O::CliffOrd,x:: AlgClffElt) -> SeqEnum[RngElt]
+//#############################
+{
+Given an order in a clifford algebra, the basis for the Clifford algebra and the order may vary. This function will output the coordinates of an element in terms of the basis of the particular order.
+
+    INPUT:
+        --x, an element of a Clifford algebra or order of a Clifford algebra
+    OUTPUT:
+        --seqx, a sequence of elements of the base ring of the clifford algebra
+}
+    require Parent(x) eq get_magma_algebra(O): "The AlgClff object of the element must be the same as the AlgClff of the order.";
+        
+    return Vector(Eltseq(x))*get_change_of_basis_matrix(O);
+end intrinsic;
+
+//#############################
+intrinsic get_order_coordinates(x::CliffOrdElt) -> SeqEnum[RngElt]
+//#############################
+{
+Given an order in a clifford algebra, the basis for the Clifford algebra and the order may vary. This function will output the coordinates of an element in terms of the basis of the particular order.
+
+    INPUT:
+        --x, an element of a Clifford algebra or order of a Clifford algebra
+    OUTPUT:
+        --seqx, a sequence of elements of the base ring of the clifford algebra
+}
+    O:=Parent(x);
+    return Vector(Eltseq(x))*get_change_of_basis_matrix(O);
+end intrinsic;
+
+//we need an AlgClffElt version of this.
+
+//#############################
+intrinsic get_order_coordinates_fast(O::CliffOrd,x:: CliffAlgElt) -> SeqEnum[RngElt]
+//#############################
+{
+Given an order in a clifford algebra, the basis for the Clifford algebra and the order may vary. This function will output the coordinates of an element in terms of the basis of the particular order.
+
+    INPUT:
+        --x, an element of a Clifford algebra or order of a Clifford algebra
+    OUTPUT:
+        --seqx, a sequence of elements of the base ring of the clifford algebra
+}
+  return O`get_order_coordinates_fast(x); //this seems wrong
+end intrinsic;
+
+//#############################
+intrinsic closest_vector(O::CliffOrd,x:: CliffAlgElt) -> CliffOrdElt
+//#############################
+{
+    INPUT:
+        --O, clifford order
+        --x, element of algebra associated to O which is a clifford vector
+        
+    OUTPUT:
+        --alpha, an element of Vec(O) that is closest to x.
+}
+    alpha:=O!O`closest_vector(x);
+    return alpha;
+end intrinsic;
+
+
+//
+//-------------AUXILLARY FUNCTIONS-------------------
+//
+
+
+//#############################
+intrinsic get_maximal_orders_old(gens::SeqEnum) -> SeqEnum, BoolElt
+//#############################
+{
+
+The input here should be [CliffAlgElt] and the output is [CliffAlgOrd].
+
+TODO:
+    This function is really computing a lot more information about the order that we are not recording
+    this should be stored in the order as we are recording it. It also needs to return a clifford order.
+
+This function finds all maximal orders of a Clifford algebra.
+
+--The rand argument specifies whether to use a random search algorithm.
+--The seek argument specifies whether to search for maximal orders with the smallest possible discriminant.
+--The stop argument specifies the number of maximal orders to find before stopping.
+--The p argument specifies the modulus of the coefficients of the generators of the maximal orders.
+
+The function works by recursively trying to enlarge a basis of an order with a new vector.
+It stops when it cannot enlarge the basis any further, or when it has found the specified number of maximal orders.
+
+The function returns a list of all the maximal orders found, and a list of all the orders that were checked.
+}
+    /*
+    I couldn't figure out the optional parameters here so I'm just sticking them in.
+    */
+    rand := false;
+    seek:=false;
+    stop := Infinity();
+    p := 2;
+    silent := false;
+    
+    //this is needed for the grow function.
+    Z:=Integers();
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function basis(vs)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    The `basis` function converts a set of vectors in a lattice to a basis for the lattice.
+    It does this by
+        --first calculating the least common multiple of the denominators of all the vectors.
+        --creates a vector space over the integers with the same dimension as the lattice.
+        --converts the vectors to elements of the vector space, and calculates a basis for the vector space.
+        --converts the basis back to elements of the lattice.
+    */
+      d := LCM([Denominator(i): i in Eltseq(v), v in vs]);
+      Zn := RSpace(Z,#Eltseq(vs[1]));
+      zvs := [Zn|d*i: i in vs];
+      basn := Basis(sub<Zn|zvs>);
+      newbas := [(Universe(vs)!v)/d: v in basn];
+      return newbas;
+    end function;
+    
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function grow(cliff_gens,v)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    Try to enlarge a basis of an order with a new vector
+
+    This function takes two arguments:
+    --gens: A list of generators of a Clifford algebra.
+    --v: A vector in the Clifford algebra generated by gens.
+
+    This function takes as input a list of generators of a Clifford algebra and a vector in the Clifford algebra. It then attempts to enlarge the set of generators by adding the vector and its products with the existing generators. The function returns true and the new set of generators if it is able to enlarge the set of generators in a way that preserves the discriminant of the Clifford algebra. Otherwise, the function returns false and the original set of generators.
+
+    The function works by first computing the discriminant of the Clifford algebra generated by the given list of generators. It then checks to see if the vector is linearly independent of the existing generators. If so, it adds the vector to the list of generators and recomputes the discriminant. The function repeats this process until it is no longer able to enlarge the set of generators without changing the discriminant.
+    */
+        gens:=cliff_gens;
+        //gens:=[get_algebra_elt(x) : x in cliff_gens];
+        //cliff_order(Z,gens);
+        ord := Order(Z,gens);
+        disc := Discriminant(ord);
+        disc /:= LCM([Denominator(i): i in Eltseq(Solution(Matrix(gens),Vector(Eltseq(v))))])^2;
+        Append(~gens,v);
+        repeat
+        gens := basis(gens);
+        genmat := Matrix([Eltseq(i): i in gens]);
+        if exists(newv){x*y: x,y in gens|exists{t: t in Eltseq(Solution(genmat,x*y))|t notin Z}} then
+            if not IsCoercible(PolynomialRing(Z),MinimalPolynomial(newv)) then
+                return false, ord;
+            end if;
+          disc /:= LCM([Denominator(i): i in Eltseq(Solution(genmat,newv))])^2;
+          Append(~gens,newv);
+        end if;
+        until not assigned newv or disc notin Z;
+        neword := disc in Z select Order(Z,gens) else ord;
+        
+        if neword eq ord then
+            disc := Discriminant(ord);
+        end if;
+        
+        assert Discriminant(neword) eq disc;
+        return neword ne ord, neword;
+    end function;
+    
+    ord := Order(Z,gens);
+    Zt := PolynomialRing(Z);
+    done := {@@};
+    max := {@@};
+    left := {@ ord @};
+        while #left gt 0 do
+            ind := (rand select Random(1,#left) else (seek select random{x: x in [1..#left]|Discriminant(left[x]) eq m} where m is Min([Discriminant(i): i in left]) else #left));
+            no := left[ind];
+            left := left[1..ind-1] join left[ind+1..#left];
+            if no in done then
+                vprintf Clifford,3: ".";
+                continue;
+                end if;
+            Include(~done,no);
+            dps := [&+[v[i]*no.i: i in [1..#gens]]/p: v in CartesianPower({0..p-1},#gens)|v ne <0: i in [1..#gens]> and rep{v[i]: i in [1..#gens]|v[i] ne 0} eq 1];
+            grown := [<a,b> where a,b is grow(Basis(no),i): i in dps|IsCoercible(Zt,MinimalPolynomial(i))];
+            if forall{x: x in grown|not x[1]} then
+              Include(~max,no);
+            else
+              left join:= {@x[2]: x in grown|x[1]@};
+            end if;
+            
+            //---printing---
+            vprintf Clifford,3: "%o %o %o\n", #done, #max, #left;
+           
+            
+            if #max eq stop then
+                return max, done;
+            end if;
+        end while;
+    return max, done;
+end intrinsic;
+
+
+//#################
+intrinsic get_maximal_orders(cl::CliffAlg) -> SeqEnum
+//#################
+{
+The default output for getting maximal orders in a Clifford algebra.
+It returns all the clifford orders containing the basis elements.
+}
+    if not assigned cl`maximal_orders then
+        gens:=get_basis(cl);
+        orders:=get_maximal_orders_old([get_algebra_elt(x) : x in gens]);
+        cl`maximal_orders:=[clifford_order(Z,[cl!x:x in Basis(order)]): order in orders];
+    end if;
+    
+    return cl`maximal_orders;
+    
+end intrinsic;
+
+//#########################################
+intrinsic units( O :: CliffOrd) -> SeqEnum,SeqEnum,GrpMat
+//#########################################
+{
+Taylor: Adam, I thought that you could write [CliffAlgElt] for the type of sequence but it is complaining.
+
+OUTPUT:
+    --a sequence of clifford units, as CliffOrdElt elements
+    --a sequence of all of the units, as CliffOrdElt elements
+    --a matrix group consisting of all of the units,
+    
+This function is a simplified version of the cliff_units function.
+
+
+The function is slower for d = 4 but the only one that has a chance for d = 6 or larger, etc.
+
+--The bound argument specifies the maximum number of generators to use in the search for short vectors.
+--The find_all argument specifies whether to find all units of the order, or just some.
+
+The function works by finding all the short vectors in a lattice that is associated with the order, subject to the condition that the sum of any two short vectors is also a short vector.
+It then checks which of these short vectors are Clifford group elements, and returns those elements as the units of the order.
+The function returns a list of units of the order, a list of all units of the order (if find_all is true), and the matrix group generated by the known units.
+
+Note that finding the order of the matrix group directly may be slow and it
+is recommended to reduce it modulo a small prime and use the CompositionTree
+functionality instead.
+}
+    //This flag trick is bugged on this one for some reason.
+    
+    flag1:=(assigned O`clifford_units);
+    flag2:=(assigned O`all_units);
+    flag3:=(assigned O`units_matrix_group);
+    flag4:=(assigned O`repn_units);
+    
+    if not flag1 or not flag2 or not flag3 or not flag4 then
+        clifford_units,all_units,matrix_group,repn:=O`get_units_easy();
+        O`clifford_units:=[O!x:x in clifford_units];
+        O`all_units:=[O!x :x in all_units];
+        O`units_matrix_group:=matrix_group;
+        repn_on_order_elements:=func<x|repn(x`elt)>;
+        O`repn_units:=repn_on_order_elements; //this should be defined on the units but currently we need to go to the algebra
+    end if;
+    
+    return O`clifford_units,O`all_units,O`units_matrix_group,O`repn_units;
+
+end intrinsic;
+
+//#########################################
+intrinsic get_unit_vectors(O::CliffOrd)->SeqEnum
+//#########################################
+{
+    Get the elements of the clifford group which are vectors.
+}
+    if not assigned O`vec_units then
+        Ogrp:=units(O);
+        vec_units:=[v : v in Ogrp | is_vec(get_algebra_elt(v))];
+        O`vec_units:=vec_units;
+    end if;
+    
+    return O`vec_units;
+
+end intrinsic;
+
+//#########################################
+intrinsic vec_basis(O::CliffOrd)->SeqEnum
+//#########################################
+{
+    Get the elements of the clifford group which are vectors.
+}
+    if not assigned O`vec_basis then
+        cl:=get_clifford_algebra(O);
+        O`vec_basis:=[O!&+[(cl!b[i])*cl.i : i in [1..dimension(O)]] : b in Basis(vec(O))];
+    end if;
+        return O`vec_basis;
+end intrinsic;
+
+
+//########################################
+intrinsic units_fp(O::CliffOrd)->SeqEnum,GrpFP,UserProgram
+//########################################
+{
+    Give the units as a finitely presented group.
+    
+    INPUT:
+        --O, an order in a Clifford algebra of type CliffOrd
+        
+    OUTPUT:
+        --units_gens, elements CliffOrdElt which generate the unit group.
+        --units_fp_group, a magma finitely presented group
+        --fp_map, a map from the units to the finitely presented group
+}
+
+    flag1:=(assigned O`units_gens);
+    flag2:=(assigned O`units_fp_group);
+    flag3:=(assigned O`units_fp_map);
+    
+    if not flag1 or not flag2 or not flag3 then
+        Ogrp,Ounits,Omat,repn:=units(O);
+        Uquo1,f1:=FPGroup(Omat);
+        Uquo2,f2:=ReduceGenerators(Uquo1);
+        h1:=f1^(-1);
+        
+        ugens:=[];
+        for u in Ogrp do
+            if f2(h1(repn(u))) in Generators(Uquo2) then
+                Append(~ugens,u);
+            end if;
+        end for;
+        
+        O`units_gens:=ugens;
+        O`units_fp_group:=Uquo1;
+        O`units_fp_map:=func<x|(f2(h1(O`repn_units(x))))>;
+    end if;
+    
+    return O`units_gens,O`units_fp_group,O`units_fp_map;
+end intrinsic;
+
+
+//################################
+intrinsic norm_euclidean_algorithm(b::CliffOrdElt,a::CliffOrdElt : side:="right")->CliffOrdElt,CliffOrdElt
+//################################
+{
+Find the closest vector to a^(-1)*b get q the closest vector so that
+    b:=a*q+r
+where the norm or r is less than the norm of a.
+
+The norm of r is guaranteed to be less than the norm of a if the covering radius of the clifford vectors is less than 1.
+}
+    //side:="right" is the default option currently.
+    //right division is undone by left multiplication.
+    
+    if side eq "right" then
+        require Parent(a) eq Parent(b): "a and b are not elements of the same order";
+        require is_vec(a*star(b)): "The result of a * star(b) is not a vector.";
+
+
+        q:=closest_vector(a^(-1)*b);
+        r:=b-a*q;
+        return q,r;
+    elif side eq "left" then
+        require Parent(a) eq Parent(b): "a and b are not elements of the same order";
+        require is_vec(star(b)*a): "The result of a * star(b) is not a vector.";
+
+
+        q:=closest_vector(b*a^(-1));
+        r:=b-q*a;
+        return q,r;
+    else
+        error "The side must be either right or left";
+    end if;
+end intrinsic;
+
+//#################
+intrinsic is_norm_euclidean(c::CliffOrd) -> Bool
+//#################
+{
+Given an order in a clifford algebra, return if it a clifford-euclidean or not.
+If it is, set its euclidean algorithm and euclidean norm attributes.
+}
+    if not assigned c`is_norm_euclidean then
+        r:=get_vec_covering_radius(c);
+        if r lt 1 then
+            c`is_norm_euclidean:=true;
+            c`is_euclidean:=true;
+            c`euclidean_algorithm:=norm_euclidean_algorithm;
+            return true;
+        else
+            c`is_norm_euclidean:=false;
+        end if;
+    end if;
+
+    return c`is_norm_euclidean;
+end intrinsic;
+
+//#################
+intrinsic add_euclidean(c::CliffOrd, e::UserProgram)
+//#################
+{Add Euclidean algorithm to Clifford order.
+    
+    INPUT:
+        --c, Order in Clifford Algebra
+        --e, Euclidean Algorithm
+            input: x,y Clifford order elements
+            output: q,r a quotient and a remainder.
+    
+    OUTPUT: this is a procedure.
+    
+}
+
+    c`is_euclidean := true;
+    c`euclidean_algorithm := e;
+end intrinsic;
+
+
+
+//####################################
+intrinsic cliff_gcd(a::CliffOrdElt,b::CliffOrdElt : verbose:=false)->CliffOrdElt
+//###################################
+{
+    >d := 3;
+    >C:=clifford(d);
+    >mygens:=generators(C);
+    >ord := Order(Z,mygens); //Lipschitz Order
+    >mos := maximal_orders(mygens); //There is a unique maximal order containing the Lipschitz order
+    >O:=mos[1];
+    >c:=(1+I[1]+2*I[2]+20*I[3]);
+    >b:=c;
+    >a:=10;
+    >clifford_gcd(a,b)
+}
+
+    b1:=b;
+    a1:=a;
+    r1:=a1;
+    //count:=0;
+    while (r1 ne 0) do
+      // count := count +1;
+      // print(count);
+       q1:=closest_vector(a1^(-1)*b1);
+       r1:=b1-a1*q1;
+       if r1 ne 0 then
+          b1:=a1;
+          a1:=r1;
+          end if;
+    end while;
+    return a1;
+end intrinsic;
+
+//##################################
+intrinsic get_unimodular_pair(O::CliffOrd,x::CliffAlgElt)->Seq
+//##################################
+{
+
+    EXAMPLES:
+    
+        >x:=(1+I[1]+2*I[2]+20*I[3])/10;
+        >pair:=get_unimodular_pair(x)
+        >anew:=pair[1];
+        >bnew:=pair[2];
+        >anew in O;
+        >bnew in O;
+        >x eq anew^(-1)*bnew
+}
+    den:=LCM([Denominator(i): i in Eltseq(x)]);
+    a:=den;
+    b:=den*x;
+    a1:=cliff_gcd(a,b);
+    anew:=a1^(-1)*a;
+    bnew:=a1^(-1)*b;
+    return [anew,bnew];
+end intrinsic;
+
+
+/*
+intrinsic Hash(X::T) -> RngIntElt
+{Return a hash value for the object x (should be between 0 and 2^31-1)}
+   // Code: determine a hash value for the given object
+   // NOTE: Objects X and Y of type T for which X eq Y is true
+   //       MUST have the same hash value
+   return hash;
+end intrinsic;
+
+
+The hash of the order is the Hash of the magma order.
+*/
+
+//#######################
+intrinsic short_clifford_vectors(O::CliffOrd,a::RngIntElt,b::RngIntElt) -> SeqEnum[Tup]
+//#######################
+{
+    Returns the clifford vectors as OrdCliffElts of norm between a and b.
+}
+
+    short_ord_elts:=[];
+    shorts:=ShortVectors(vec(O),a,b);
+
+    for shorty in shorts do
+        short_vec:=shorty[1];
+        len:=shorty[2];
+        short_ord_elt:=&+[ short_vec[i]*O.i : i in [1..dimension(O)]];
+        short_ord_elts:=short_ord_elts cat [<short_ord_elt,len>];
+    end for;
+        
+    return short_ord_elts;
+
+end intrinsic;
+
+//#######################
+intrinsic short_clifford_vectors(O::CliffOrd,a::RngIntElt) -> SeqEnum[Tup]
+//#######################
+{
+    Returns the clifford vectors as OrdCliffElts of norm less than a.
+}
+    return short_clifford_vectors(O,1,a);
+end intrinsic;
+
+
+//#######################
+intrinsic 'eq'(alpha::CliffOrdElt,beta::RngIntElt) -> SeqEnum[Tup]
+//#######################
+{
+    Returns the clifford vectors as OrdCliffElts of norm less than a.
+}
+    cl:=get_clifford_algebra(alpha);
+    alpha_cl:=(cl!alpha);
+    beta_cl:=(cl!beta);
+    return (alpha_cl eq beta_cl);
+end intrinsic;
+
+//#######################
+intrinsic 'eq'(beta::RngIntElt,alpha::CliffOrdElt) -> SeqEnum[Tup]
+//#######################
+{
+    Returns the clifford vectors as OrdCliffElts of norm less than a.
+}
+    cl:=get_clifford_algebra(alpha);
+    alpha_cl:=(cl!alpha);
+    beta_cl:=(cl!beta);
+    return (alpha_cl eq beta_cl);
+end intrinsic;
+
+
+//#########################################
+//#########################################
+//#########################################
+/*
+
+THING BELOW THIS LINE NEED TO BE IMPLEMENTED AS INTRINSICS.
+
+*/
+//#########################################
+//#########################################
+//#########################################
+
+
+
+
+
+
+//#########################################
+function code(ord,inds)
+//#########################################
+/*
+// This function constructs a linear code from a Clifford algebra order.
+--The ord argument is the order to construct the code from.
+--The inds argument is a list of indices of the generators of the order to use in the construction of the code.
+--The function works by constructing a lattice from the order, and then projecting the lattice onto the subspace spanned by the generators specified in the inds argument.
+--The function then returns a linear code from the projected lattice.
+--The function returns a linear code over the field GF(2).
+*/
+  Zn := RSpace(Z,#Eltseq(ord.1));
+  lcm := LCM([Denominator(i): i in Eltseq(d), d in Basis(ord)]);
+  subn := sub<Zn|[Zn!Eltseq(lcm*i): i in Basis(ord)]>;
+  sm := sub<Zn|[Zn.i: i in inds]>;
+  smeet := subn meet sm; //Vec(O) is the intersection of the order with the clifford vectors
+  s_red := sub<Zn|[s div (lcm div 2): s in Basis(smeet)]>;
+  Zi := RSpace(Z,#inds);
+  s_i := sub<Zi|[[v[i]: i in inds]: v in Basis(s_red)]>;
+  lc := LinearCode(ChangeRing(BasisMatrix(s_i),GF(2)));
+  return lc;
+end function;
+
+
+

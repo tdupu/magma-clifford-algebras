@@ -1,0 +1,480 @@
+
+Z:=Integers();
+Q:=RationalField();
+
+//%%%%%%%%%%%%%%%%%%%%%%%%%
+function get_elements(multiplier,gens,initial_set,n)
+//%%%%%%%%%%%%%%%%%%%%%%%%%
+/*
+    INPUT:
+        --gens, elements you can multiply
+        --multiplier, an AlgClffElt
+        --initial_set, a set of elements th
+        --n, an natural number
+    OUTPUT:
+        --set of all products of length n of elements from gens.
+*/
+    prods := {@multiplier*i: i in initial_set@};
+    for i in [1..n] do
+      prods join:= {@g*p: g in gens, p in prods@} join {@p*g: g in gens, p in prods@};
+    end for;
+    return prods;
+end function;
+
+
+//########################
+intrinsic get_congruence_test(O::CliffOrd,p::RngIntElt)->.,. //user functions but I forget the type
+//########################
+{}
+    O_ass,ass_map:=associative_algebra(O);
+    //O_assp,ass_mapp:=associative_algebra(O,p);
+    O_mat,mat_map:=MatrixAlgebra(O_ass);
+    Zmodp,modp_map:=Integers(p);
+    to_Zmodp := hom< Z -> Zmodp | x :-> Zmodp!x >;
+    O_matp,to_matp:=ChangeRing(O_mat,Zmodp,to_Zmodp);
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function reduce_matrix(m)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%
+        return Matrix(2,2,[to_matp(mat_map(ass_map(O!a))) : a in Eltseq(m)]);
+    end function;
+
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function test_congruence(elt3,elt3_inv)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%
+        mred:=reduce_matrix(elt3);
+        id_red:=reduce_matrix(elt3*elt3_inv);
+        if mred eq id_red then
+            return true;
+        else
+            return false;
+        end if;
+    end function;
+    
+    return test_congruence,reduce_matrix;
+end intrinsic;
+
+//############################
+intrinsic gives_relation(elt3::.,elt3_inv::. : verbose:=false)->BoolElt
+//############################
+{}
+    //---printing---
+    if verbose then
+        printf "entering gives_relation...\n";
+    end if;
+    
+    return (elt3 eq elt3*elt3_inv);
+end intrinsic;
+
+    
+//###########################
+intrinsic get_Gamma0_test(O::CliffOrd,alpha::AlgMatElt)-> UserProgram //user function
+//###########################
+{}
+    O_mag:=get_magma_order(O);
+    M2O:=MatrixRing(O_mag,2);
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function in_Gamma0(elt3,elt3_inv)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        conjalpha:=func<A|alpha^(-1) * A * alpha>;
+        conj:=conjalpha(elt3);
+        if conj in M2O then
+            return true;
+        else
+            return false;
+        end if;
+    end function;
+    
+    return in_Gamma0;
+end intrinsic;
+
+//########################
+intrinsic evaluate_relation(eltseq::SeqEnum,rel::SeqEnum) -> . //element of some group
+//########################
+{}
+/*
+    INPUT:
+        --eltseq, a nonempty sequence of elements which can be multiplied
+        --rel, a sequence of integers rel = [i1,i2,...,ir]
+        
+    OUTPUT:
+        --eltseq[i1]*eltseq[i2]* ... * eltseq[ir];
+*/
+    return &*[eltseq[i] : i in rel];
+end intrinsic;
+
+//########################
+intrinsic inverse_sequence(mygens::SeqEnum,seq::SeqEnum,myinverse::. : verbose:=false)->SeqEnum //the dot is a user defined function
+//########################
+{}
+    //---printing---
+    if verbose then
+        printf "inverting sequence... \n mygens=%o \n,seq=%o \n ",mygens,seq;
+    end if;
+    
+    seq_rev:=Reverse(seq);
+    seq_inv:=[];
+    
+    for i in seq_rev do
+        x:=mygens[i];
+        if verbose then
+            printf "finding inverse of x=%o",x;
+        end if;
+        x_inv:=myinverse[x];
+        j:=Index(mygens,x_inv);
+        Append(~seq_inv,j);
+    end for;
+    
+//    return [Index(mygens,myinverse[mygens[i]]) : i in Reverse(seq)];
+
+    return seq_inv;
+end intrinsic;
+
+//########################
+intrinsic get_trivial_relations(gens::Setq,inverse::Setq)->SeqEnum
+//########################
+{
+
+Assume that it has an element and its inverse.
+
+}
+    triv_rels:=[];
+    for g in gens do
+        i:=Index(gens,g);
+        j:=inverse[i];
+        triv_rels:=triv_rels cat [[i,j]];
+    end for;
+    return triv_rels;
+end intrinsic;
+
+//###########################
+intrinsic RandomSubset(S::SetCart,k::RngIntElt) -> SetEnum
+//###########################
+{Random subset of a cartesian product}
+  error if k lt 0, "subsets of negative size not allowed";
+  error if k gt #S, "size of subset cannot be greater than size of set";
+  s := {};
+  repeat
+    Include(~s,Random(S));
+  until #s eq k;
+  return s;
+end intrinsic;
+
+// elts should be a sequence or ordered set of generators 
+// inv_seq should be a sequence giving the index in elts of the inverse
+// of each element of elts
+// new convention: the identity should *not* be an element of elts
+// (the code will still work in principle if it is, but not as well)
+// membership_test is a function that returns true or false depending on
+// whether its argument belongs to a given subgroup
+
+// This was a bad idea.  You can't just leave out generators that belong
+// to the subgroup; our subgroups usually aren't normal, so that can change
+// whether a product is in the subgroup.  It would work for a quotient.
+
+//################################
+intrinsic get_relations_wrong(elts::Setq,inv_seq::Setq,membership_test::UserProgram : len:=10,num_rels:=1000,batch_size := 1000)->SeqEnum
+//################################
+{Look for relations}
+/*
+    EXAMPLE:
+        sn := SymmetricGroup(5);
+        elts := {@sn|(1,2),(1,2,3,4,5)@};
+        elts join:= {@i^-1: i in elts@};
+        inv_seq := [Index(elts,i^-1): i in elts];
+        rels := get_relations_new(elts,inv_seq,func<x,y|x eq Identity(sn)>:len := 15);
+
+        fg<a,b,c> := FreeGroup(3);
+        s5,tos5 := quo<fg|rels>;
+        tp := TietzeProcess(s5); 
+        // unnecessary in this example, but important in larger ones
+        SimplifyPresentation(~tp);
+        s5 := Group(tp);
+        assert #s5 eq #sn;
+
+*/
+
+  relations_array := AssociativeArray();
+  rels_count := 0;
+  // or do we want one array for elements and one for inverses?
+  elements_array := AssociativeArray();
+
+  easy_rels := [];
+  good_elts := [];
+  for x in [1..#elts] do
+    if membership_test(elts[x],elts[inv_seq[x]]) then
+      Append(~easy_rels,[x]);
+    else
+      Append(~good_elts,x);
+    end if;
+  end for;
+  error if exists{x: x in good_elts|inv_seq[x] notin good_elts}, "membership test not compatible with inversion (or inverses are wrong)";
+
+  good_pairs := [[]: x in [1..#elts]];
+  for x,y in good_elts do
+    if membership_test(elts[x]*elts[y],elts[inv_seq[y]]*elts[inv_seq[x]]) then
+      Append(~easy_rels,[x,y]);
+    else
+      Include(~good_pairs[x],y);
+    end if;
+  end for;
+  
+  gr := Digraph<Set(good_elts)|{[i,j]: j in good_pairs[i], i in good_elts}>;
+  adj_mat := AdjacencyMatrix(gr);
+
+  vprint Clifford: "starting relation search";
+  for i in [1..len] do
+    // we reduce the amount of junk by not allowing an
+    // element to be followed by its inverse.
+    // Maybe it's even better if we prevent (or extract) all substrings
+    // that are relations?
+    vprint Clifford, 2: "looking for relations involving sequences of length", i;
+    npaths := &+Diagonal(adj_mat^i);
+    if npaths le batch_size then
+      paths := [[e]: e in good_elts];
+      for j in [1..i-1] do
+        paths := {@Append(x,y): y in good_pairs[x[j]], x in paths@};
+      end for;
+    else
+      paths := {@@};
+      repeat
+        path := [Random(good_elts)];
+        repeat Append(~path,Random(good_pairs[path[#path]]));
+        until #path eq i;
+        Include(~paths,path);
+      until #paths eq batch_size;
+    end if;
+    for cseq in paths do 
+    /* cp := CartesianProduct([{1..#elts}] cat [{1..#elts-1}^^(i-1)]);
+     for c in (#cp le batch_size select cp else RandomSubset(cp,batch_size)) do
+      cseq := [c[j]: j in [1..i]];
+      for j in [1..i-1] do
+        if cseq[j+1] ge inv_seq[cseq[j]] then cseq[j+1] +:= 1; end if;
+      end for; */
+      prod := &*[elts[j]: j in cseq];
+      inv_prod := &*[elts[inv_seq[j]]: j in Reverse(cseq)];
+      if exists(k){k: k in Keys(relations_array)|membership_test(elements_array[k,1]*inv_prod,prod*elements_array[k,2])} then
+        // can't put c because different lengths are in different universes
+        Append(~relations_array[k],cseq);
+        vprintf Clifford, 3: ".";
+        rels_count +:= 1;
+        if rels_count eq num_rels then break i; end if;
+      else
+        // the idea is that for each key we will have a list of sequences
+        // that multiply to something equivalent to the key.
+        relations_array[cseq] := [cseq];
+        elements_array[cseq] := [prod,inv_prod];
+      end if;
+    end for;
+    vprintf Clifford, 3: "\n";
+    if i mod 5 eq 0 then vprintf Clifford, 2: "found %o relations so far\n", &+[#relations_array[i]-1: i in Keys(relations_array)]; end if;
+  end for;
+
+  vprint Clifford: "converting relation arrays into relations";
+  relations := easy_rels cat [relations_array[k,1] cat [inv_seq[i]: i in Reverse(Eltseq(r))]: r in relations_array[k], k in Keys(relations_array)];
+  // assert forall{r: r in relations|membership_test(&*[elts[i]: i in r], &*[elts_inv_seq[i]]: i in Reverse(r)]};
+  return relations;
+end intrinsic;
+
+//################################
+intrinsic get_relations(elts::Setq,inv_seq::Setq,membership_test::UserProgram : len:=10,num_rels:=1000,batch_size := 1000)->SeqEnum
+//################################
+{Look for relations}
+/*
+    EXAMPLE:
+        sn := SymmetricGroup(5);
+        elts := {@sn|(1,2),(1,2,3,4,5)@};
+        elts join:= {@i^-1: i in elts@};
+        inv_seq := [Index(elts,i^-1): i in elts];
+        rels := get_relations_new(elts,inv_seq,func<x,y|x eq Identity(sn)>:len := 15);
+
+        fg<a,b,c> := FreeGroup(3);
+        s5,tos5 := quo<fg|rels>;
+        tp := TietzeProcess(s5); 
+        // unnecessary in this example, but important in larger ones
+        SimplifyPresentation(~tp);
+        s5 := Group(tp);
+        assert #s5 eq #sn;
+
+*/
+
+  relations_array := AssociativeArray();
+  rels_count := 0;
+  // or do we want one array for elements and one for inverses?
+  elements_array := AssociativeArray();
+
+  easy_rels := [];
+  good_elts := [];
+  for x in [1..#elts] do
+    if membership_test(elts[x],elts[inv_seq[x]]) then
+      Append(~easy_rels,[x]);
+    else
+      Append(~good_elts,x);
+    end if;
+  end for;
+  error if exists{x: x in good_elts|inv_seq[x] notin good_elts}, "membership test not compatible with inversion (or inverses are wrong)";
+
+  good_pairs := [[]: x in [1..#elts]];
+  for x,y in good_elts do
+    if membership_test(elts[x]*elts[y],elts[inv_seq[y]]*elts[inv_seq[x]]) then
+      Append(~easy_rels,[x,y]);
+    else
+      Include(~good_pairs[x],y);
+    end if;
+  end for;
+  
+  for i in [1..len] do
+    vprint Clifford, 2: "looking for relations involving sequences of length", i;
+    cp := CartesianProduct([{1..#elts}] cat [{1..#elts-1}^^(i-1)]);
+    for c in (#cp le batch_size select cp else RandomSubset(cp,batch_size)) do
+      cseq := [c[j]: j in [1..i]];
+      for j in [1..i-1] do
+        if cseq[j+1] ge inv_seq[cseq[j]] then cseq[j+1] +:= 1; end if;
+      end for; 
+      prod := &*[elts[j]: j in cseq];
+      inv_prod := &*[elts[inv_seq[j]]: j in Reverse(cseq)];
+      if exists(k){k: k in Keys(relations_array)|membership_test(elements_array[k,1]*inv_prod,prod*elements_array[k,2])} then
+        // can't put c because different lengths are in different universes
+        Append(~relations_array[k],cseq);
+        vprintf Clifford, 3: ".";
+        rels_count +:= 1;
+        if rels_count eq num_rels then break i; end if;
+      else
+        // the idea is that for each key we will have a list of sequences
+        // that multiply to something equivalent to the key.
+        relations_array[cseq] := [cseq];
+        elements_array[cseq] := [prod,inv_prod];
+      end if;
+    end for;
+    vprintf Clifford, 3: "\n";
+    if i mod 5 eq 0 then vprintf Clifford, 2: "found %o relations so far\n", &+[#relations_array[i]-1: i in Keys(relations_array)]; end if;
+  end for;
+
+  vprint Clifford: "converting relation arrays into relations";
+  relations := easy_rels cat [relations_array[k,1] cat [inv_seq[i]: i in Reverse(Eltseq(r))]: r in relations_array[k], k in Keys(relations_array)];
+  // assert forall{r: r in relations|membership_test(&*[elts[i]: i in r], &*[elts_inv_seq[i]]: i in Reverse(r)]};
+  return relations;
+end intrinsic;
+
+//#####################
+intrinsic get_relations_easy(mat_gens::SeqEnum[AlgMatElt] : len:=10,num_rels:=1000,batch_size := 1000)->SeqEnum
+//#####################
+{}
+    gens:={@ g : g in mat_gens @} join {@ g^-1 : g in mat_gens @};
+    inverse:={@ Index(gens, g^(-1)) : g in gens @};
+    membership_test:=func<x,y| IsScalar(x) >;
+
+    random_rels:=get_relations(gens,inverse,membership_test : len:=10,num_rels:=1000,batch_size := 1000);
+    triv_rels:=get_trivial_relations(gens,inverse);
+    
+    all_rels:=random_rels cat triv_rels;
+    
+    return all_rels,gens;
+end intrinsic;
+
+
+//########################
+intrinsic get_relations_old(elts::SeqEnum,myinverse::Assoc,membership_test::. : len:=10,num_rels:=10,batch_size:=1000, verbose:=false)->SeqEnum
+//########################
+{}
+/*
+    INPUT:
+  
+      --elts, elements that can be multiplied and tested for equality.
+            These should be certain generators and their inverses.
+        --membership_test, UserProgram function
+                INPUT:
+                    --two elements elt3,elt3_inv
+                OUTPUT:
+                    --true, elt3 is satisfies the test
+                    --false,
+                    
+    OUTPUT:
+        --relations, an associative array of relations whose keys are elements elt3
+            and where relations[elt3] is a sequence [elt1,elt2] satisfying above.
+
+*/
+    relations:=AssociativeArray();
+    rels_count:=0;
+    num_gens:=#elts;
+
+    //%%%%%%%%%%%%%%%%
+    function random_sequence(len)
+    //%%%%%%%%%%%%%%%%
+        return [Random([1..num_gens]) : i in [1..len]];
+    end function;
+
+    //%%%%%%%%%%%%%%%%
+    function get_batch()
+    //%%%%%%%%%%%%%%%%
+        return {@ random_sequence() : i in [1..batch_size] @};
+    end function;
+
+    batch:=get_batch();
+
+    for myseq1 in batch do
+        for myseq2 in batch do
+            if myseq1 ne myseq2 then
+            
+                //---printing---
+                if verbose then
+                    "finding sequences for inverses...\n";
+                end if;
+
+                myseq1_inv:=inverse_sequence(elts,myseq1,myinverse: verbose:=verbose);
+                myseq2_inv:=inverse_sequence(elts,myseq2,myinverse: verbose:=verbose);
+                
+                //---printing---
+                if verbose then
+                    "making long sequences...\n";
+                end if;
+                
+                myseq12:=myseq1 cat myseq2_inv;
+                myseq21:=myseq2 cat myseq1_inv;
+                
+                //---printing---
+                if verbose then
+                    "evaluating relations...\n";
+                end if;
+    
+                elt3:=evaluate_relation(elts,myseq12);
+                elt3_inv:=evaluate_relation(elts,myseq21);
+                
+                //---printing---
+                if verbose then
+                    printf "applying membership test... \n";
+                end if;
+                
+                flag:=membership_test(elt3,elt3_inv);
+                if flag then
+                    //---printing---
+                    printf "found a relation... \n elt3=%o,\n rel=%o, \n",elt3,myseq12;
+                    rels_count:=rels_count+1;
+                    if elt3 in Keys(relations) then
+                        relations[elt3]:=relations[elt3] cat [myseq12];
+                    else
+                        relations[elt3]:=[myseq12];
+                    end if;
+                end if;
+            end if;
+            
+            if rels_count ge num_rels then
+                
+                //---printing---
+                if verbose then
+                    printf "terminating because we found %o relations...\n", num_rels;
+                end if;
+                            
+                return relations;
+                
+            end if;
+        end for;
+    end for;
+    
+    //---printing---
+    if verbose then
+        printf "terminating because search space exhausted...\n";
+    end if;
+    
+    return relations;
+end intrinsic;

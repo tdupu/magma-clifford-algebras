@@ -1,0 +1,1195 @@
+
+/*
+
+Clifford Algebras for Modular Symbols.
+
+Authors: Taylor Dupuy (github:tdupu) and Adam Logan, Summer 2024
+
+This package is a wrapper for many of the functions we are using to compute modular symbols in the Clifford context. See The Basic Theory of Clifford-Bianchi Groups (ArXiV link PUT HERE). This package builds on top of magma's built-in AlgCliff[AlgClffElt] types for Clifford algebras. We are using the name CliffAlg[CliffAlgElt] which we hope is not too confusing.
+
+use https://magma.maths.usyd.edu.au/magma/handbook/quaternion_algebras as a template for style.
+
+WARNING: The indexing of clifford_algebra(d) has changed to match the paper.
+
+*/
+
+declare verbose Clifford, 6;
+
+declare type CliffAlg[CliffAlgElt];
+declare type Cliff2x2[CliffAlgElt];
+declare attributes CliffAlg: alg, base_ring, consts, vecs, vec_inds, is_vec, star_v, star,star_cl,gens, gfix, left_to_vec, right_to_vec, get_d, prods_n, size_cl, size_mat, cusp_univ, prime, bar,dim, nm,infty,Zn,Qn,arity,label, is_cliff_unit, cliff_lat, vec_spc, maximal_orders;
+//star and star_cl and star_v are too many
+
+//MORE DESCRIPTIVE NAMES
+//alg should be magma_algebra
+//cliff_lat should be clifford_lattice
+//is_clifford_unit
+//norm
+//Zn,Qn are deprecated
+//const needs a new name, it is the structure constants of the quadratic form
+//cusp_univ is not needed anymore
+
+declare attributes CliffAlgElt: Parent, elt, seq, alg, is_vec,left_unimodular_pairs, right_unimodular_pairs,in_clifford_group,is_scalar; //seq should be changed to eltseq
+
+declare attributes Cliff2x2: alg, mat;
+
+Z:=Integers();
+Q:=RationalField();
+R:=RealField();
+
+//#############################
+intrinsic clifford_algebra(d::RngIntElt) -> CliffAlg
+//#############################
+{
+
+Create a clifford algebra from a sequence of integers.
+Note that the convention has changed to match the clifford algebras paper.
+
+}
+    r:=R;
+    return clifford_algebra([r!-1: i in [1..d-1]],r);
+end intrinsic;
+
+/*
+TODO:
+For hyperbolic space, we need to build two things:
+1) an inclusion of CC_n into CC_{n+1}
+2) an inclusion of (-d1,...,-dn/QQ) into CC_{n+1}.
+
+I don't think this is immediately necessary but if we want to start talking about fundamental domains this is something we should do. Maybe we can use sub in AlgCliff to get this to work?
+
+*/
+
+
+//#############################
+intrinsic clifford_algebra(d::RngIntElt, r::Rng) -> CliffAlg
+//#############################
+{
+
+Create a clifford algebra from a sequence of integers.
+Note that the convention has changed to match the clifford algebras paper.
+
+}
+  return clifford_algebra([r!-1: i in [1..d-1]],r);
+end intrinsic;
+
+//#############################
+intrinsic clifford_algebra(sqs::SeqEnum[RngElt], r::Rng) -> .
+//#############################
+{Define a Clifford algebra over the given ring with the given imaginary units.}
+    cl := New(CliffAlg);
+    d := #sqs;
+    cl`arity:=d;
+    cl`dim:=2^d;
+    cl`base_ring := r; //I had to change this to base ring
+    cl`consts := sqs;
+    cl`alg := CliffordAlgebra(DiagonalMatrix([r|r!i: i in sqs]));
+    cl`vec_inds := [1] cat [2^i+1: i in [0..d-1]];
+    cl`vecs := [cl`alg.i: i in cl`vec_inds];
+    cl`is_vec := func<x|forall{r: r in [1..2^d]|r in cl`vec_inds or Eltseq(x)[r] eq 0}>;
+
+    //the Type here should be the built-in Magma type Infty.
+    //this will make the arithmetic run better
+    //cl`cusp_univ := cop<cl,{"infinity"}>;
+
+    //https://magma.maths.usyd.edu.au/magma/handbook/coproducts
+    infty:=Infinity();
+    cl`infty:=infty;
+    cl`cusp_univ := cop<cl,{infty}>;
+
+    //this isn't quite right either because this should be Clifford vectors only
+
+    cp := CartesianPower({0,1},d);
+    prods := [[cl`alg|cl`vecs[i+1]: i in [1..d]|c[d+1-i] eq 1]: c in cp];
+    assert [cl`alg|&*i: i in prods] eq [cl`alg.i: i in [1..2^d]];
+    revs := [Reverse(i): i in prods];
+    revprods := [&*i: i in revs];
+
+    r2d := RModule(r,2^d);
+    cl`prime := func<x|cl`alg![(-1)^#([x: x in [0..d-1]|((i-1) div 2^x) mod 2 eq 1])*x[i]: i in [1..2^d]]>;
+    cliff_lat := RSpace(Z,2^d);
+    Z2d := cliff_lat; //
+    Zn := RSpace(Integers(),#Eltseq(cl.1)); //
+    Qn := RSpace(RationalField(),#Eltseq(cl.1)); //this is a bit of a mess
+    cl`cliff_lat:=Zn;
+    cl`vec_spc:=Qn;
+
+    
+    
+    cl`cliff_lat:=cliff_lat;
+    cl`star_v := hom<r2d->r2d|[Eltseq(i): i in revprods]>;
+    cl`star_cl := func<x|cl`alg!Eltseq(cl`star_v(r2d!Eltseq(x)))>;
+    cl`bar := func<x|cl`star_cl(cl`prime(x))>;
+    cl`nm := func<x|x*cl`bar(x)>;
+    cl`gens := [Matrix(2,2,i): i in [[0,v,v,0],[1,v,v,0]], v in cl`vecs[2..d+1]];
+    cl`gens cat:= [Matrix(2,2,i): i in [[0,1,-1,0],[1,1,-1,0]]];
+
+    // cl`gfix := {@Matrix(2,2,[cl`alg.i,0,0,s*cl`alg.i]): i in [1..2^d], s in [1,-1]|cl`alg.i*cl`star_cl(s*cl`alg.i) eq 1@};
+    //cl`gfix join:= {@Matrix(2,2,[cl|0,1,-1,0])*i: i in cl`gfix@};
+
+    cl`size_cl := func<x|&+[i^2: i in Eltseq(x)]>;
+    cl`size_mat := func<x|&+[cl`size_cl(i): i in Eltseq(x)]>;
+
+    rn := sub<r2d|[r2d.i: i in cl`vec_inds]>;
+
+    //%%%%%%%%%%%%%%%%%%%%%
+    function left_to_vec(v)
+    //%%%%%%%%%%%%%%%%%%%%%
+    //x such that x*v is a vector
+        rm := hom<r2d->r2d|[Eltseq(cl`alg.i*v): i in [1..2^d]]>;
+        sp := (Image(rm) meet rn)@@rm;
+        return sp;
+    end function;
+    
+    cl`left_to_vec :=left_to_vec;
+    
+    //%%%%%%%%%%%%%%%%%%%%%
+    function right_to_vec(v)
+    //%%%%%%%%%%%%%%%%%%%%%
+        // x such that v*x is a vector
+        rm := hom<r2d->r2d|[Eltseq(v*cl`alg.i): i in [1..2^d]]>;
+        sp := (Image(rm) meet rn)@@rm;
+        return sp;
+    end function;
+    
+    cl`right_to_vec := right_to_vec;
+
+    //%%%%%%%%%%%%%%%%%%%%
+    function get_d(a,b,c)
+    //%%%%%%%%%%%%%%%%%%%%
+    /*
+    This function returns the dimension of the subspace of the Clifford algebra that is generated by the elements a, b, and c. The function also returns a basis for the subspace if the dimension is greater than zero.
+    */
+        rm := hom<r2d->r2d|[a*cl`star_cl(cl`alg.i): i in [1..2^d]]>;
+        im := r2d!(1+b*cl`star_cl(c));
+        ker := Kernel(rm);
+        
+        if im in Image(rm) then
+            d0 := im@@rm;
+            assert a*cl`star_cl(d0)-b*cl`star_cl(c) eq 1;
+            found := true;
+        else
+            d0 := r2d!0;
+            found := false;
+        end if;
+        
+        return found, d0, ker;
+    end function;
+    cl`get_d:=get_d;
+
+
+    //%%%%%%%%%%%%%%%%%%%%%%%%%
+    function prods_n(m,gs,f,n)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+        INPUT:
+            --gs, a set of AlgClffElt
+            --m, an AlgClffElt
+            --f, ??
+            --n, an natural number
+        OUTPUT:
+            --set of all products of length n of elements form gs.
+    */
+        prods := {@m*i: i in f@};
+        for i in [1..n] do
+          prods join:= {@g*p: g in gs, p in prods@} join {@p*g: g in gs, p in prods@};
+        end for;
+        return prods;
+    end function;
+    cl`prods_n:=prods_n;
+    
+    
+    //need to define some things for the is_cliff_grp_elt
+    vs:=cl`vecs;
+    star:=cl`star_cl;
+    cl`star:=star;
+    cl`nm:=nm;
+    is_vec:=cl`is_vec;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%
+    function is_cliff_grp_elt(x)
+    //%%%%%%%%%%%%%%%%%%%%%%%
+        A:=forall{r: r in vs|is_vec(x*r*star(x))}; //preserves clifford vectors
+        B:=forall{i: i in [2..cl`dim]| nm(x)[i] eq 0}; //norm is scalar
+        return A and B;
+    end function;
+
+
+    cl`is_cliff_unit:=is_cliff_grp_elt;
+
+  return cl;
+end intrinsic;
+
+/*
+Taylor:
+I think get_algebra is too ambiguous for general consumption.
+*/
+
+//#############################
+intrinsic get_algebra(C::CliffAlg)->AlgClff
+//#############################
+{Returns the magma algebra AlgCliff. This is the same as get_magma_algebra.}
+    return C`alg;
+end intrinsic;
+
+//#############################
+intrinsic get_magma_algebra(C::CliffAlg)->AlgClff
+//#############################
+{Returns the magma algebra AlgCliff. This is the same as get_algebra.}
+    return get_algebra(C);
+end intrinsic;
+
+//#############################
+intrinsic get_magma_algebra(c::CliffAlgElt)->AlgCliff
+//#############################
+{Returns the magma algebra AlgCliff. This is the same as get_algebra.}
+    return get_algebra(Parent(c));
+end intrinsic;
+
+
+
+//#############################
+intrinsic get_vector_space(C::CliffAlg)->VecSpc
+//#############################
+{
+Returns the underlying vector space of CliffAlg.
+This was called Q2d previously.
+}
+    return C`vec_spc;
+end intrinsic;
+
+//#############################
+intrinsic get_clifford_lattice(C::CliffAlg)->VecSpc
+//#############################
+{
+Returns the underlying clifford lattice of CliffAlg.
+This was called Z2d previously.
+}
+    return C`cliff_lat;
+end intrinsic;
+
+//#############################
+intrinsic get_vector_indices(X::CliffAlg)->Seq
+//#############################
+{Get the indices of vector space generators which correspond to clifford algebra generators. These are the basis elements of the quadratic space together with 1.}
+    return X`vec_inds;
+end intrinsic;
+
+//#############################
+intrinsic dimension(C::CliffAlg)->RngIntElt
+//#############################
+{The dimension of the clifford algebra}
+    return Dimension(C`alg);;
+end intrinsic;
+
+
+
+//#############################
+intrinsic Print(X::CliffAlg)
+//#############################
+{Print a Clifford algebra object}
+  printf "Clifford algebra over %o with structure constants %o", X`base_ring, X`consts;
+end intrinsic;
+
+//#############################
+intrinsic Print(X::CliffAlgElt)
+//#############################
+{Print a Clifford algebra element object}
+  printf "%o", X`elt; //should be copy-pastable
+end intrinsic;
+
+//#############################
+intrinsic '.'(X::CliffAlg, n::RngIntElt) -> CliffAlgElt
+//#############################
+{nth generator}
+  return cliff_elt(X,X`alg.n);
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(X::CliffAlg, Y::CliffAlg) -> BoolElt
+//#############################
+{equality test}
+  return X`base_ring eq Y`base_ring and X`consts eq Y`consts;
+end intrinsic;
+
+//#############################
+intrinsic Hash(X::CliffAlg) -> RngIntElt
+//#############################
+{Return a hash}
+  return Hash(<X`base_ring,X`consts>);
+end intrinsic;
+
+//#############################
+intrinsic cliff_elt(X::CliffAlg, x::.) -> CliffAlgElt
+//#############################
+{Make a Clifford algebra element}
+  ce := New(CliffAlgElt);
+  ce`Parent:=X;
+  ce`elt := X`alg!Eltseq(x);
+  ce`seq := Eltseq(x);
+  ce`alg:=X`alg; //In the future we should have a get_algebra intrinsic that checks if this has been defined and then only does this declaration when it is needed.
+  return ce;
+end intrinsic;
+
+//#############################
+intrinsic get_algebra_elt(x::CliffAlgElt) -> AlgClffElt
+//#############################
+{
+    INPUT: x, a CliffAlgElt
+    OUTPUT: y, a AlgClffElt
+}
+    return get_magma_elt(x);
+end intrinsic;
+
+//#############################
+intrinsic get_magma_elt(x::CliffAlgElt) -> AlgClffElt
+//#############################
+{
+    INPUT: x, a CliffAlgElt
+    OUTPUT: y, a AlgClffElt
+}
+    return x`elt;
+end intrinsic;
+
+//#############################
+intrinsic dim(C::CliffAlg)->RngIntElt
+//#############################
+{returns the dimension of the Clifford algebra}
+    return Dimension(C`alg);
+end intrinsic;
+
+//#############################
+intrinsic dimension(C::CliffAlg)->RngIntElt
+//#############################
+{returns the dimension of the Clifford algebra}
+    return Dimension(C`alg);
+end intrinsic;
+
+//#############################
+intrinsic get_basis(C::CliffAlg)->SeqEnum
+//#############################
+{returns the basis}
+    return [C.i : i in [1..dim(C)]];
+end intrinsic;
+
+
+//#############################
+intrinsic Parent(X::CliffAlgElt) -> CliffAlg
+//#############################
+{parent}
+  return X`Parent;
+end intrinsic;
+
+//#############################
+intrinsic Eltseq(x::CliffAlgElt) -> SeqEnum[RngElt]
+//#############################
+{sequence}
+  return Eltseq(x`elt);
+end intrinsic;
+
+//#############################
+intrinsic IsCoercible(X::CliffAlg, x::. : verbose:=false) -> BoolElt, .
+//#############################
+{
+
+I need to look at the magma documentation to see if this is part of automatic coercion or forced coercion. I think this is used primarily for forced coercion which is about doing things like checking if rationals can actually be integers rather than knowning that every integer is always a rational.
+
+For future reference the automatice coercion using ISA(X,Y) should take care of the following cases:
+    --X=CliffAlgElt, Y=AlgClffElt true.
+    --X=CliffOrdElt, Y=AlgClffElt, Y=CliffAlgElt
+For SetCspCliffElt it seems it makes sense to make a CliffAlgVecElt and CliffOrdVecElt types which would inherit CliffAlgElt and CliffOrdElt.    
+    
+}
+    //---printing---
+    vprintf Clifford,6: "Entering IsCoercible for CliffAlg with type %o...\n", Type(x);
+
+    //The built-in AlgClffElt coercion will do the heavy lifting
+    C:=get_algebra(X);
+    
+    if Type(x) eq CliffAlgElt then
+        
+        y:=get_algebra_elt(x);
+        
+    elif Type(x) eq CliffOrdElt then
+    
+        //------printing shit---------
+        if verbose then
+            printf "detected CliffOrdElt in coersion to CliffAlgElt...\n";
+        end if;
+        
+        y:=get_algebra_elt(x);
+        y:=x`elt;
+        return true,cliff_elt(X,y);
+        
+    elif Type(x) eq SetCspCliffElt then
+    
+        //------printing shit---------
+        if verbose then
+            printf "detected SetCspCliffElt in coersion to CliffAlgElt...\n";
+        end if;
+        
+        y:=get_magma_value(x);
+        if Type(y) eq Infty then
+            return false;
+        else
+            return IsCoercible(X,y);
+        end if;
+   
+    else
+   
+        y:=x;
+   
+    end if;
+    
+    //------printing shit---------
+    if verbose then
+        printf "testing coersion in underlying AlgClff...\n";
+    end if;
+    
+    is_algcliffelt, y_algcliffelt:=IsCoercible(C,y);
+    
+    //------printing shit---------
+    if verbose then
+        printf "returned %o...\n", is_algcliffelt;
+    end if;
+    
+    if is_algcliffelt then
+        return true, cliff_elt(X,y_algcliffelt);
+    end if;
+    
+    return false, "could not coerce."; //make a formatted string with y
+  
+end intrinsic;
+
+
+
+//##############################
+intrinsic 'in'(e::., C::CliffAlg) -> BoolElt
+//##############################
+{Return whether e is in X}
+    
+    //---printing---
+    vprintf Clifford,6: "Entering 'in' for CliffAlg with e of type %o ... \n",Type(e);
+    
+    flag:=IsCoercible(C,e);
+    return flag;
+    
+end intrinsic;
+
+//#############################
+intrinsic '+'(x:: CliffAlgElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Add elements of Clifford algebra}
+  require Parent(x) eq Parent(y): "must be in the same algebra";
+  return cliff_elt(Parent(x),x`elt+y`elt);
+end intrinsic;
+
+//#############################
+intrinsic '+'(x:: RngElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Add elements of Clifford algebra}
+    if x in Parent(y)`base_ring then
+        return cliff_elt(Parent(y),x+y`elt);
+    end if;
+end intrinsic;
+
+//#############################
+intrinsic '*'(x:: CliffAlgElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Multiply elements of Clifford algebra}
+  require Parent(x) eq Parent(y): "must be in the same algebra";
+  return cliff_elt(Parent(x),x`elt*y`elt);
+end intrinsic;
+
+//#############################
+intrinsic '*'(n::RngElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Multiply elements of Clifford algebra}
+    cl:=Parent(y);
+    cl_mag:=get_magma_algebra(cl);
+    return (cl_mag!n)*y;
+end intrinsic;
+
+//#############################
+intrinsic '*'(y::CliffAlgElt,n:: RngIntElt) -> CliffAlgElt
+//#############################
+{Multiply elements of Clifford algebra}
+  return cliff_elt(Parent(y),n*y`elt);
+end intrinsic;
+
+
+//#############################
+intrinsic '*'(x:: AlgClffElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Multiply elements of Clifford algebra}
+  require Parent(x) eq Parent(y`elt): "must be in the same algebra";
+  return cliff_elt(Parent(y),x*y`elt);
+end intrinsic;
+
+//#############################
+intrinsic '*'(x:: CliffAlgElt, y::AlgClffElt) -> CliffAlgElt
+//#############################
+{Multiply elements of Clifford algebra}
+      require Parent(x`elt) eq Parent(y): "must be in the same algebra";
+      return cliff_elt(Parent(x),x`elt*y);
+end intrinsic;
+
+//#############################
+intrinsic '-'(x:: CliffAlgElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Subtract elements of Clifford algebra}
+  require Parent(x) eq Parent(y): "must be in the same algebra";
+  return cliff_elt(Parent(x),x`elt-y`elt);
+end intrinsic;
+
+//#############################
+intrinsic '-'(x:: CliffAlgElt, y::AlgClffElt) -> CliffAlgElt
+//#############################
+{Subtract elements of Clifford algebra}
+    cl:=Parent(x);
+    return x-cl!y;
+end intrinsic;
+
+//#############################
+intrinsic '-'(x:: AlgClffElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Subtract elements of Clifford algebra}
+    cl:=Parent(y);
+    return (cl!x)-y;
+end intrinsic;
+
+//#############################
+intrinsic '-'(x:: CliffOrdElt, y::AlgClffElt) -> CliffAlgElt
+//#############################
+{Subtract elements of Clifford algebra}
+  return cliff_elt(get_clifford_algebra(x),get_magma_elt(x)-y);
+end intrinsic;
+
+//#############################
+intrinsic '-'(x:: AlgClffElt, y::CliffOrdElt) -> CliffAlgElt
+//#############################
+{Subtract elements of Clifford algebra}
+  return cliff_elt(get_clifford_algebra(y),x-get_magma_elt(y));
+end intrinsic;
+
+//#############################
+intrinsic '-'(x:: CliffAlgElt) -> CliffAlgElt
+//#############################
+{Negate element of Clifford algebra}
+  return cliff_elt(Parent(x),-x`elt);
+end intrinsic;
+
+//#############################
+intrinsic '/'(x:: CliffAlgElt, y::CliffAlgElt) -> CliffAlgElt
+//#############################
+{Divide elements of Clifford algebra}
+  return cliff_elt(Parent(x),(x`elt)*(y`elt)^-1);
+end intrinsic;
+
+//#############################
+intrinsic '/'(x:: CliffAlgElt, y::RngElt) -> CliffAlgElt
+//#############################
+{Divide elements of Clifford algebra}
+    require y in Parent(x)`base_ring: "denominator must be in the base ring";
+    return cliff_elt(Parent(x),(x`elt)*y^-1);
+end intrinsic;
+
+//#############################
+intrinsic '^'(x:: CliffAlgElt, y::RngIntElt) -> CliffAlgElt
+//#############################
+{Raise Clifford algebra element to power}
+    return cliff_elt(Parent(x),(x`elt)^y);
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(x::CliffAlgElt, y::CliffAlgElt) -> BoolElt
+//#############################
+{equality}
+  return Parent(x) eq Parent(y) and x`seq eq y`seq;
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(x::CliffAlgElt, y::AlgClffElt) -> BoolElt
+//#############################
+{equality}
+  cl:=Parent(x);
+  return (x eq cl!y);
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(y::AlgClffElt,x::CliffAlgElt) -> BoolElt
+//#############################
+{equality}
+  cl:=Parent(x);
+  return (x eq cl!y);
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(x::RngIntElt, y::CliffAlgElt) -> BoolElt
+//#############################
+{equality RngIntElt and CliffAlgElt --- recursive, coerce then compare.}
+    cl:=Parent(y);
+    return ((cl!x) eq y);
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(y::CliffAlgElt,x::RngIntElt) -> BoolElt
+//#############################
+{equality CliffAlgElt and RngIntElt --- recursive, flip then compare.}
+  return (x eq y);
+end intrinsic;
+
+
+//norm would be a better name for the final package.
+//#############################
+intrinsic nm(x:: CliffAlgElt) -> RngElt
+//#############################
+{reduced norm}
+  return x*bar(x);
+end intrinsic;
+
+//#############################
+intrinsic nm(x:: AlgClffElt) -> RngElt
+//#############################
+{reduced norm for AlgClffElt}
+  return  x*bar(x);
+end intrinsic;
+
+//#############################
+intrinsic size(x:: AlgClffElt) -> RngElt
+//#############################
+{Euclidean norm for AlgClffElt}
+  return  Eltseq(x*bar(x))[1];
+end intrinsic;
+
+
+//#############################
+intrinsic size(x:: CliffAlgElt) -> RngElt
+//#############################
+{Euclidean norm for CliffAlgElt}
+  return  Eltseq(x*bar(x))[1];
+end intrinsic;
+
+//#############################
+intrinsic star(x:: AlgClffElt) -> AlgClffElt
+//#############################
+{
+
+The star conjugation for magma elements, unclear if this works not over the rationals.
+Also called MainAntiautomorphism in Magma.
+https://magma.maths.usyd.edu.au/magma/handbook/text/1053
+
+}
+    cl:=Parent(x);
+    
+    //all of this is auxillary for defining star_v
+    //star_v is the star involution on vectors
+    q2d,f:=VectorSpace(cl);
+    d:=get_arity(cl);
+    cp := CartesianPower({0,1},d);
+    vec_inds := [1] cat [2^i+1: i in [0..d-1]];//could write a get_vecs function
+    vecs := [cl.i: i in vec_inds];
+    prods := [[cl|vecs[i+1]: i in [1..d]|c[d+1-i] eq 1]: c in cp];
+    assert [&*i: i in prods] eq [cl.i: i in [1..2^d]];
+    revs := [Reverse(i): i in prods];
+    revprods := [&*i: i in revs];
+    
+    star_v:=hom<q2d->q2d|[Eltseq(i): i in revprods]>;
+    
+    return cl!Eltseq(star_v(q2d!Eltseq(x)));
+end intrinsic;
+
+
+//#############################
+intrinsic star(x:: CliffAlgElt) -> CliffAlgElt
+//#############################
+{the star conjugation}
+    C:=Parent(x);
+    return cliff_elt(C,C`star_cl(x`elt));
+end intrinsic;
+
+//#############################
+intrinsic get_arity(cl::AlgClff) -> RngInt
+//#############################
+{Get the arity of the quadratic form defining the clifford algebra --- this is the AlgClff version.}
+    return Integers()!Log(2,Dimension(cl)); //there is probably a valuation call that is better
+end intrinsic;
+
+//#############################
+intrinsic get_arity(cl::CliffAlg) -> RngInt
+//#############################
+{Get the arity of the quadratic form defining the clifford algebra -- this is the CliffAlg version.}
+    return Integers()!Log(2,dimension(cl)); //there is probably a valuation call that is better
+end intrinsic;
+
+
+//#############################
+intrinsic prime(x:: CliffAlgElt) -> CliffAlgElt
+//#############################
+{The parity involution for CliffAlgElt}
+    C:=Parent(x);
+    return cliff_elt(C,C`prime(x`elt));
+end intrinsic;
+
+//#############################
+intrinsic prime(x:: AlgClffElt) -> AlgClffElt
+//#############################
+{The parity involution for AlgClffElt.
+Also called MainInvolution in Magma.
+https://magma.maths.usyd.edu.au/magma/handbook/text/1053
+}
+    cl:=Parent(x);
+    d:=get_arity(cl);
+    return cl![(-1)^#([y: y in [0..d-1]|((i-1) div 2^y) mod 2 eq 1])*x[i]: i in [1..2^d]];
+end intrinsic;
+
+/*
+I was hoping this would work but it doesn't :-(
+
+//#############################
+intrinsic "'"(x:: AlgClffElt) -> AlgClffElt
+//#############################
+{The parity involution for AlgClffElt}
+    return prime(x);
+end intrinsic;
+
+*/
+
+//#############################
+intrinsic bar(x:: CliffAlgElt) -> CliffAlgElt
+//#############################
+{The reduced norm for CliffAlgElt}
+  return prime(star(x));
+end intrinsic;
+
+
+//#############################
+intrinsic bar(x:: AlgClffElt) -> AlgClffElt
+//#############################
+{clifford conjugation for magma AlgCliff elements}
+  return star(prime(x));
+end intrinsic;
+
+//#############################
+intrinsic get_I(X::CliffAlg) -> SeqEnum[CliffAlgElt]
+//#############################
+{
+
+    INPUT:
+        --X, CliffAlg
+    OUTPUT:
+        --I, a sequence of generators of X.
+        
+In the final package it would be nice to have
+    C<[I]>:=clifford_algebra(something);
+then be able to make calls like I[1]^2+2*I[2] etc.
+
+}
+    d:=#(X`vec_inds)-1;
+    inds:=[ 2^(n)+1 : n in [0..d-1]];
+    I:=[X.j : j in inds];
+    return I;
+end intrinsic;
+
+//#############################
+intrinsic is_vec(x:: AlgClffElt) -> BoolElt
+//#############################
+{
+Returns true if x is a clifford vector and false otherwise.
+This is sort of a shitty implementation that calls a function that computes too much.
+
+}
+    d:=get_arity(Parent(x));
+    vec_inds := [1] cat [2^i+1: i in [0..d-1]];
+    the_test := func<x|forall{r: r in [1..2^d]|r in vec_inds or Eltseq(x)[r] eq 0}>;
+    return the_test(x);
+end intrinsic;
+
+
+//#############################
+intrinsic is_vec(x:: CliffAlgElt) -> BoolElt
+//#############################
+{
+
+Returns true if x is a clifford vector and false otherwise.
+This is the AlgClffElt version.
+
+}
+    C:=Parent(x);
+    if not assigned x`is_vec then
+        x`is_vec:=C`is_vec(x`elt);
+    end if;
+
+    return x`is_vec;
+end intrinsic;
+
+//#############################
+intrinsic in_clifford_group(x:: CliffAlgElt) -> Bool
+//#############################
+{
+
+
+}
+  C:=Parent(x);
+  return C`is_cliff_unit(x`elt);
+end intrinsic;
+
+
+/*
+//#############################
+intrinsic IsCoercible(X::Rng, x::CliffAlgElt) -> BoolElt, RngElt
+//#############################
+{Try to coerce}
+    
+end intrinsic;
+*/
+
+
+
+//###############################################
+//###############################################
+//-------MATRICES
+//###############################################
+//###############################################
+
+
+//#############################
+intrinsic Matrix(x::RngIntElt,y::RngIntElt,seq::SeqEnum[CliffAlgElt]) -> AlgMatElt
+//#############################
+{Make a matrix}
+  return Matrix(x,y,[i`elt: i in seq]);
+end intrinsic;
+
+//##############################
+intrinsic pdet(A::AlgMatElt) -> AlgClffElt
+//##############################
+{
+ The pseudodeterminant of a 2 by 2 matrix with AlgClffElt entries.
+}
+    m:=NumberOfRows(A);
+    n:=NumberOfColumns(A);
+    require m eq n: "need a square matrix.";
+    require n eq 2: "need a 2 by 2 matrix.";
+    require Type(A[1][1]) eq AlgClffElt: "need matrix of AlgClffElt entries.";
+    return A[1,1]*star(A[2,2])-A[1,2]*star(A[2,1]);
+end intrinsic;
+
+//##############################
+intrinsic reverse_clifford_adjoint(A::AlgMatElt) -> AlgMatElt
+//##############################
+{
+ The the reverse adjoint of a 2 by 2 matrix with AlgClffElt entries.
+}
+    m:=NumberOfRows(A);
+    n:=NumberOfColumns(A);
+    require m eq n: "need a square matrix.";
+    require n eq 2: "need a 2 by 2 matrix.";
+    require Type(A[1][1]) eq AlgClffElt: "need matrix of AlgClffElt entries.";
+    
+    a:=A[1][1];
+    b:=A[1][2];
+    c:=A[2][1];
+    d:=A[2][2];
+    
+    rev_conj:=Matrix(2,2,[bar(d),bar(b),bar(c),bar(a)]);
+    return rev_conj;
+end intrinsic;
+
+
+//##############################
+intrinsic clifford_adjoint(A::AlgMatElt) -> AlgMatElt
+//##############################
+{
+ The the clifford adjoint of a 2 by 2 matrix with AlgClffElt entries.
+}
+    m:=NumberOfRows(A);
+    n:=NumberOfColumns(A);
+    require m eq n: "need a square matrix.";
+    require n eq 2: "need a 2 by 2 matrix.";
+    require Type(A[1][1]) eq AlgClffElt: "need matrix of AlgClffElt entries.";
+    
+    a:=A[1][1];
+    b:=A[1][1];
+    c:=A[1][1];
+    d:=A[1][1];
+    
+    rev_conj:=Matrix(2,2,[bar(a),bar(c),bar(b),bar(d)]);
+    return rev_conj;
+end intrinsic;
+
+
+//##############################
+intrinsic conj_action(g::AlgMatElt,A::AlgMatElt) -> AlgMatElt
+//##############################
+{
+ The the clifford adjoint of a 2 by 2 matrix with AlgClffElt entries.
+}
+    m:=NumberOfRows(A);
+    n:=NumberOfColumns(A);
+    require m eq n: "need a square matrix.";
+    require n eq 2: "need a 2 by 2 matrix.";
+    require Type(A[1][1]) eq AlgClffElt: "need matrix of AlgClffElt entries.";
+    
+    
+    return reverse_clifford_adjoint(g)*A*g;
+    
+end intrinsic;
+
+
+//##############################
+intrinsic radius_and_center_revherm(M::AlgMatElt) -> RngElt,RngElt
+//##############################
+{
+ Given a 2x2 reverse Hermitian matrix with AlgClffElt entries over the reals computes the center and radius squared of the associated quadratic form defining the sphere.
+}
+    require is_reverse_hermitian(M): "matrix must be 2x2 reverse hermitian";
+    
+    //This currently doesn't handle infinite radius.
+    
+    betaM:=M[1][1];
+    alphaM:=M[1][2];
+    gammaM:=M[2][1];
+    betabarM:=M[2][2];
+    
+    p:=-betabarM*gammaM^(-1);
+    rad_sq:=(betaM*betabarM-alphaM*gammaM)/gammaM^2;
+    return rad_sq,p;
+    
+end intrinsic;
+
+
+//##############################
+intrinsic is_scalar(x::AlgClffElt) -> BoolElt
+//##############################
+{
+ Tests if an AlgClffElt is scalar.
+}
+   cl:=Parent(x);
+   return x eq cl!Eltseq(x)[1];
+
+end intrinsic;
+
+
+//##############################
+intrinsic is_reverse_hermitian(A::AlgMatElt) -> BoolElt
+//##############################
+{
+ Tests if a 2x2 matrix with AlgClffElt entries is reverse Hermitian.
+}
+    m:=NumberOfRows(A);
+    n:=NumberOfColumns(A);
+    require m eq n: "need a square matrix.";
+    require n eq 2: "need a 2 by 2 matrix.";
+    require Type(A[1][1]) eq AlgClffElt: "need matrix of AlgClffElt entries.";
+    
+    beta:=A[1][1];
+    betabar:=A[2][2];
+    alpha:=A[1][2];
+    gamma:=A[2][1];
+    
+    return is_scalar(alpha) and is_scalar(gamma) and is_vec(beta) and (betabar eq bar(beta));
+    
+end intrinsic;
+
+
+//Very Broken It Needs Some Large Clifford Algebra For It To Work
+//#######################################################
+intrinsic get_random_sl2(C::CliffAlg ) ->AlgMatElt
+//#######################################################
+{
+Produce a random element of sl2 with entries in the magma AlgClffElt.
+This has not been tested.
+
+The optional arguments ngens := 10, bd := 1 needs to be implemented.
+}
+    
+    Q2d:=get_vector_space(C);
+    Z2d:=get_clifford_lattice(C);
+    cl:=get_algebra(C);
+    d := Valuation(Dimension(cl),2);
+    right_to_vec:=C`right_to_vec;
+    left_to_vec:=C`left_to_vec;
+    get_d:=C`get_d;
+    prods_n:=C`prods_n;
+    ngens:=8;
+    bd := 1;
+    
+  
+    repeat
+        got := false; is_good := false;
+        
+        repeat
+          ana := &+[Random(-bd,bd)*cl.i: i in RandomSubset({1..Dimension(cl)},ngens)];
+          rana := right_to_vec(ana);
+          rsana := right_to_vec(star(ana)); printf ".";
+        until size(ana) gt 1 and Dimension(rana) eq d+1;
+
+        zrana := Saturation(sub<Z2d|[Z2d!(LCM([Denominator(n): n in Eltseq(i)])*i): i in Basis(rana)]>);
+        zrsana := Saturation(sub<Z2d|[Z2d!(LCM([Denominator(n): n in Eltseq(i)])*i): i in Basis(rsana)]>);
+
+        dens := {**};
+        for i in [1..10] do
+            ab := star(cl!&+[Random(-3,3)*i: i in Basis(zrana)]);
+            ac := cl!&+[Random(-3,3)*i: i in Basis(zrsana)];
+            assert is_vec(ana*star(ab)) and is_vec(star(ana)*ac);
+            got,ad := get_d(ana,ab,ac);
+            if got then
+                Include(~dens,LCM([Denominator(i): i in Eltseq(ad)]));
+            end if;
+            is_good := forall{v: v in Eltseq(ad)|v in Z} and forall{r: r in [ana*star(ab), ac*star(ad), star(ac)*ana, star(ad)*ab]|is_vec(r)};
+            if got and is_good then
+                break;
+            end if;
+        end for;
+
+        if Min(dens) le 10 then
+            printf "%o ", dens;
+            if not (got and is_good) then
+            for i in [1..10^3] do
+                ab := cl!&+[Random(-3,3)*i: i in Basis(zrana)];
+                ac := cl!&+[Random(-3,3)*i: i in Basis(zrsana)];
+                got,ad := get_d(ana,ab,ac);
+                if got then
+                    Include(~dens,LCM([Denominator(i): i in Eltseq(ad)]));
+                end if;
+                is_good := forall{v: v in Eltseq(ad)|v in Z} and forall{r: r in [ana*star(ab), ac*star(ad), star(ac)*ana, star(ad)*ab]|is_vec(r)};
+                if got and is_good then
+                    break;
+                end if;
+            end for;
+        end if;
+        end if;
+
+  until got and is_good;
+
+  mat := Matrix(2,2,[ana,ab,ac,ad]);
+  return mat;
+end intrinsic;
+
+
+    
+//#######################
+intrinsic cliff2x2(x:: SeqEnum[CliffAlgElt]) -> Cliff2x2
+//#######################
+{Make a matrix}
+  require #x eq 4: "need 4 entries for 2 x 2 matrix";
+  m := New(Cliff2x2);
+  m`alg := Parent(x[1]);
+  m`mat := Matrix(2,2,x);
+  return m;
+end intrinsic;
+
+//#######################
+intrinsic cliff2x2(X::CliffAlg,x::AlgMatElt[AlgClff]) -> Cliff2x2
+//#######################
+{Make a matrix}
+  return cliff2x2([X!i: i in Eltseq(x)]);
+end intrinsic;
+
+//#######################
+intrinsic Print(x::Cliff2x2)
+//#######################
+{print}
+  printf "%o", x`mat;
+end intrinsic;
+
+//#######################
+intrinsic is_mat(m::Cliff2x2) -> BoolElt
+//#######################
+{Decide whether a matrix is a valid Clifford matrix}
+  cl := m`alg;
+  return forall{r: r in [cl!m`mat[1,1]*cl`star_cl(m`mat[1,2]),cl!m`mat[2,1]*cl`star_cl(m`mat[2,2]),cl`star_cl(m`mat[1,1])*cl!m`mat[2,1],cl`star_cl(m`mat[1,2])*cl!m`mat[2,2]]|cl`is_vec(r)};
+end intrinsic;
+
+//#######################
+intrinsic det(m::Cliff2x2) -> CliffAlgElt
+//#######################
+{Determinant of a matrix}
+  cl := m`alg;
+  return m`mat[1,1]*cl`star_cl(m`mat[2,2])-m`mat[1,2]*cl`star_cl(m`mat[2,1]);
+end intrinsic;
+
+//#######################
+intrinsic 'eq'(m::Cliff2x2, n::Cliff2x2) -> BoolElt
+//#######################
+{equality}
+  return forall{i: i,j in [1,2]|m`mat[i,j] eq n`mat[i,j]};
+end intrinsic;
+
+//#######################
+intrinsic '+'(m::Cliff2x2, n::Cliff2x2) -> Cliff2x2
+//#######################
+{Sum of matrices}
+  cl := m`alg;
+  return cliff2x2(cl,m`mat+n`mat);
+end intrinsic;
+
+//#######################
+intrinsic '-'(m::Cliff2x2, n::Cliff2x2) -> Cliff2x2
+//#######################
+{Difference of matrices}
+  cl := m`alg;
+  return cliff2x2(cl,m`mat-n`mat);
+end intrinsic;
+
+//#######################
+intrinsic '*'(m::Cliff2x2, n::Cliff2x2) -> Cliff2x2
+//#######################
+{Product of matrices}
+  cl := m`alg;
+  return cliff2x2(cl,m`mat*n`mat);
+end intrinsic;
+
+//#######################
+intrinsic '^'(m::Cliff2x2, n::RngIntElt) -> Cliff2x2
+//#######################
+{Power of matrices}
+  cl := m`alg;
+  if n lt 0 then
+    return cliff2x2(cl,(m`mat^-1)^(-n));
+  elif n eq 0 then
+    return cliff2x2(cl,[m`alg|1,0,0,1]);
+  else
+    return cliff2x2(cl,m`mat^n);
+  end if;
+end intrinsic;
+
+
+/*
+Attach("package-cliff.mag");
+Attach("package-cusp.mag");
+cl := clifford(3,Q);
+assert cl eq clifford([-1,-1,-1],Q);
+assert nm(cl.2) eq 1;
+m1 := cliff2x2([cl|0,cl.2,cl.2,0]);
+m2 := cliff2x2([cl|1,cl.3,cl.3,0]);
+assert is_mat(m1) and is_mat(m2);
+*/
+
+//#######################################
+intrinsic random_rational( :bound:=1000)->RngElt
+//#######################################
+{}
+    num:=Random([1..bound]);
+    den:=Random([1..bound]);
+    rand:=num/den;
+    return rand;
+end intrinsic;
+
+//#######################################
+intrinsic random_clifford_vector(cl::CliffAlg:bound:=1000)->CliffAlgElt
+//#######################################
+{}
+    require cl`base_ring eq Q: "this is only implemented for rational clifford algebras";
+    I:=get_I(cl);
+    rand:=cl!random_rational(:bound:=bound) + &+[random_rational(:bound:=bound)*I[i] : i in [1..#I]];
+    return rand;
+end intrinsic;
+
+
+//#######################################
+intrinsic base_ring(cl::CliffAlg)->Rng
+//#######################################
+{}
+   return cl`base_ring;
+end intrinsic;
