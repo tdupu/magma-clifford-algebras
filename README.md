@@ -5,7 +5,7 @@ A Magma package for Clifford Algebras extending magmas AlgClff and AlgClffElt ty
 
 **Algorithms**
 
-Dupuy, Taylor, Anton Hilado, Colin Ingalls, and Adam Logan. "The Basic Theory of Clifford-Bianchi Groups for Hyperbolic n-Space." *arXiv preprint arXiv:2407.19122* (2024).
+Taylor Dupuy, Anton Hilado, Colin Ingalls, and Adam Logan. "The Basic Theory of Clifford-Bianchi Groups for Hyperbolic n-Space." *arXiv preprint arXiv:2407.19122* (2024).
 
 Here is the bibtex:
 
