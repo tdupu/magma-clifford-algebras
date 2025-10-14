@@ -2,8 +2,14 @@
 
 This is a repository for working with Clifford algebras, orders $O$ in Clifford algebras, Clifford-Bianchi groups $SL_2(O)$, and modular symbols for hyperbolic $n$-space.
 
+
 Many of the functions are documented in this pre-print: 
 [The Basic Theory Of Clifford-Bianchi Groups](https://arxiv.org/abs/2407.19122)
+
+
+**Algorithms**
+
+Taylor Dupuy, Anton Hilado, Colin Ingalls, and Adam Logan. "The Basic Theory of Clifford-Bianchi Groups for Hyperbolic n-Space." *arXiv preprint arXiv:2407.19122* (2024).
 
 ```
 @article{DHIL2024,
