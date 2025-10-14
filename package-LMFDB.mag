@@ -1,0 +1,1418 @@
+/*
+Timings in the functions all need to be strings.
+They also need to not be the empty string in order to register.
+*/
+
+Z:=Integers();
+Q:=RationalField();
+
+declare verbose LMFDB, 5;
+declare type LMFDBCliffOrd;
+declare attributes LMFDBCliffOrd:
+    label,
+    clifford_algebra,
+    basis,
+    is_maximal,
+    dimension,
+    is_norm_euclidean,
+    discriminant,
+    is_star_invariant,
+    timing;
+    //clifford_unit_group_generators,
+    //clifford_unit_vectors,
+    //clifford_vector_lattice,
+    //clifford_vector_basis,
+    //conjugates,
+    //is_euclidean,
+    //is_compatible,
+    //is_not_euclidean,
+    
+LMFDBCliffOrd_ATTRS:=Sort([ "basis", "clifford_algebra", "dimension", "discriminant", "is_maximal", "is_norm_euclidean", "label","is_star_invariant","timing" ]); //always alphabetical
+
+declare type LMFDBGrpSL2Cliff;
+declare attributes LMFDBGrpSL2Cliff:
+    label,
+    matrix_generators,
+    order,
+    relations,
+    matrix_to_fpgroup,
+    timing;
+    
+LMFDBGrpSL2Cliff_ATTRS:=Sort([ "label", "matrix_generators", "matrix_to_fpgroup", "order", "relations", "timing"]); //always alphabetical
+    
+declare type LMFDBGrpSL2CliffGamma0;
+declare attributes LMFDBGrpSL2CliffGamma0:
+    matrix_coset_representatives,
+    fp_coset_representatives,
+    defining_element,
+    index,
+    level_norm,
+    label,
+    matrix_generators,
+    fp_generators,
+    rank,
+    order,
+    relations,
+    abelianization,
+    defining_element_label,
+    timing;
+    
+    //add torsion part in place of abelianizations
+    //cusps
+    
+declare type LMFDBGrpSL2Cliff;
+declare attributes LMFDBGrpSL2Cliff:
+label,
+order,
+matrix_generators,
+relations,
+timing;
+
+declare type LMFDBSubGrpSL2Cliff;
+declare attributes LMFDBSubGrpSL2Cliff:
+  label,
+  //quadratic_form,
+  order,
+  is_gamma0,
+  defining_element,
+  matrix_generators,
+  relations,
+  coset_representatives,
+  index,
+  timing;
+  
+  //torsion_part
+  //cusps
+  
+    
+declare type LMFDBHeckeMatrices;
+declare attributes LMFDBHeckeMatrices: gamma0_label,clifford_matrices,hecke_matrices,timing;
+    
+LMFDBGrpSL2CliffGamma0_ATTRS:=Sort([ "abelianization", "defining_element","defining_element_label","fp_coset_representatives", "fp_generators", "index", "label", "level_norm", "matrix_coset_representatives", "matrix_generators", "order", "rank", "relations", "timing"]); //always alphabetical
+
+LMFDBGrpSL2CliffLowIndex_ATTRS:=Sort([ "abelianization", "fp_coset_representatives", "fp_generators", "index", "label", "matrix_coset_representatives", "matrix_generators", "number", "order", "rank", "relations", "timing"]); //always alphabetical
+
+LMFDBHeckeMatrices_ATTRS:=Sort(["gamma0_label","clifford_matrices","hecke_matrices","timing"]);//ALWAYS ALPHABETICAL!
+
+
+
+//###############
+//###############
+// PRINTING
+//###############
+//###############
+  
+//################################
+intrinsic Print(O::LMFDBCliffOrd)
+//################################
+  {Print LMFDBCliffOrd}
+  printf "LMFDBCliffOrd %o:\n", Get(O, "label");
+  printf "clifford algebra %o", Get(O, "clifford_algebra");
+end intrinsic;
+
+//################################
+intrinsic Print(Gamma::LMFDBGrpSL2CliffGamma0)
+//################################
+  {Print LMFDBGrpSL2Cliff}
+  printf "LMFDBGrpSL2Cliff %o:\n", Get(Gamma, "label");
+  printf " defining_element %o", Get(Gamma, "defining_element");
+  printf " level_norm %o", Get(Gamma, "level_norm");
+end intrinsic;
+
+//################################
+intrinsic Print(G::LMFDBGrpSL2Cliff)
+//################################
+  {Print LMFDBGrpSL2Cliff}
+  printf "LMFDBGrpSL2Cliff %o:\n", Get(G, "label");
+  printf "  Order %o", Get(G, "order");
+end intrinsic;
+
+//##########################
+intrinsic Print(H::LMFDBSubGrpSL2Cliff)
+//##########################
+  {Print LMFDBSubGrpSL2Cliff}
+  printf "LMFDBSubGrpSL2Cliff %o:\n", Get(H, "label");
+  printf "  Group label %o\n", Get(H, "ambient");
+  printf " index %o \n", Get(H,"index");
+end intrinsic;
+
+//##########################
+intrinsic Print(X::LMFDBHeckeMatrices)
+//##########################
+{Print LMFDBHeckeMatrices}
+    printf "LMFDBHeckeMatrices %o:\n", Get(X, "gamma0_label");
+    num:=Get(X, "clifford_matrices");
+    Type(num);
+    printf "num hecke operators: %o \n", num;
+end intrinsic;
+
+
+// include hashing function? see https://magma.maths.usyd.edu.au/magma/handbook/text/27
+
+declare type NoneType;
+_None := New(NoneType);
+
+//#############################
+intrinsic None() -> Any
+//#############################
+{None}
+ return _None;
+end intrinsic;
+
+//#############################
+intrinsic Print(None)
+//#############################
+  {Print none}
+  printf "none";
+end intrinsic;
+
+// This function returns the value of an attribute, computing it and caching it using the function of the same name if necessary.
+
+//#############################
+intrinsic Get(G::Any, attr::MonStgElt) -> Any
+//#############################
+{}
+    if HasAttribute(G, attr) then
+        return G``attr;
+    else
+        //val := eval attr*"(G)";
+        //G``attr := val;
+        //return val;
+        return None();
+    end if;
+end intrinsic;
+
+//#############################
+//intrinsic GetGrp(G::LMFDBGrp) -> LMFDBGrp
+//#############################
+//{For compatibility for other GetGrp functions}
+//    return G;
+//end intrinsic;
+
+//###############
+//###############
+// LOAD FUNCTIONS
+//###############
+//###############
+
+//####################
+intrinsic load_lmfdb_clifford_order(line::MonStgElt: sep:="|") -> LMFDBCliffOrd
+//####################
+{}
+    vprintf LMFDB,4: "entering load_lmfdb_clifford_order \n";
+    
+    attrs:=LMFDBCliffOrd_ATTRS;
+    data := Split(line, sep: IncludeEmpty := true);
+    error if #data ne #attrs, "Wrong size data line";
+    X := New(LMFDBCliffOrd);
+    for i in [1..#data] do
+        attr := attrs[i];
+        X``attr := LoadAttr(attr, data[i], X);
+    end for;
+    return X;
+end intrinsic;
+
+//####################
+intrinsic load_lmfdb_sl2(line::MonStgElt: sep:="|") -> LMFDBGrpSL2Cliff
+//####################
+{}
+    vprintf LMFDB,4: "entering load_lmfdb_sl2 \n";
+    
+    attrs:=LMFDBGrpSL2Cliff_ATTRS;
+    data := Split(line, sep: IncludeEmpty := true);
+    error if #data ne #attrs, "Wrong size data line";
+    X := New(LMFDBGrpSL2Cliff);
+    for i in [1..#data] do
+        attr := attrs[i];
+        X``attr := LoadAttr(attr, data[i], X);
+    end for;
+    return X;
+end intrinsic;
+
+//####################
+intrinsic load_lmfdb_gamma0(line::MonStgElt: sep:="|") -> LMFDBGrpSL2CliffGamma0
+//####################
+{}
+    
+    attrs:=LMFDBGrpSL2CliffGamma0_ATTRS;
+    vprintf LMFDB,4: "entering load_lmfdb_gamma0\n, attributes %o", attrs;
+    data := Split(line, sep: IncludeEmpty := true);
+    error if #data ne #attrs, "Wrong size data line";
+    X := New(LMFDBGrpSL2CliffGamma0);
+    for i in [1..#data] do
+        attr := attrs[i];
+        X``attr := LoadAttr(attr, data[i], X);
+    end for;
+    return X;
+end intrinsic;
+
+//####################
+intrinsic load_lmfdb_hecke_matrices(line::MonStgElt: sep:="|") -> LMFDBHeckeMatrices
+//####################
+{}
+    vprintf LMFDB, 4:  "entering load_lmfdb_hecke_matrices \n";
+    
+    attrs:=LMFDBHeckeMatrices_ATTRS;
+    data := Split(line, sep: IncludeEmpty := true);
+    error if #data ne #attrs, "Wrong size data line";
+    X := New(LMFDBHeckeMatrices);
+    for i in [1..#data] do
+        attr := attrs[i];
+        X``attr := LoadAttr(attr, data[i], X);
+    end for;
+    return X;
+end intrinsic;
+
+//###############
+//###############
+// EQUALITY FUNCTIONS
+//###############
+//###############
+
+//#####################
+intrinsic 'eq'(X1::LMFDBCliffOrd,X2::LMFDBCliffOrd)->BoolElt
+//#####################
+{}
+    return LMFDB_equality(X1,X2);
+end intrinsic;
+
+//#####################
+intrinsic 'eq'(X1::LMFDBGrpSL2Cliff,X2::LMFDBGrpSL2Cliff)->BoolElt
+//#####################
+{}
+    return LMFDB_equality(X1,X2);
+end intrinsic;
+
+//#####################
+intrinsic 'eq'(X1::LMFDBGrpSL2CliffGamma0,X2::LMFDBGrpSL2CliffGamma0)->BoolElt
+//#####################
+{}
+    return LMFDB_equality(X1,X2);
+end intrinsic;
+
+//#####################
+intrinsic 'eq'(X1::LMFDBHeckeMatrices,X2::LMFDBHeckeMatrices)->BoolElt
+//#####################
+{}
+    return LMFDB_equality(X1,X2);
+end intrinsic;
+
+
+//#####################
+intrinsic LMFDB_equality(X1::Any,X2::Any)->BoolElt
+//#####################
+{}
+    my_type:=Type(X1);
+    require Type(X1) eq Type(X2): "object must be LMFDB object of the same type";
+    for attr in GetAttributes(my_type) do
+        if Get(X1,attr) eq Get(X2,attr) then
+            //do nothing
+        else
+            return false;
+        end if;
+    end for;
+
+    return true;
+
+end intrinsic;
+
+//###############
+//###############
+// READ FUNCTIONS
+//###############
+//###############
+
+//###########################
+intrinsic read_lmfdb_sl2(cl::CliffAlg)->SetIndx
+//###########################
+{}
+    fname:=get_lmfdb_sl2_path(cl);
+    lines := {@ H : H in Split(Read(fname), "\n") @};
+    return {@ load_lmfdb_sl2(line) : line in lines @};
+end intrinsic;
+
+
+//###########################
+intrinsic read_lmfdb_clifford_orders(fname::MonStgElt)->SetIndx
+//###########################
+{}
+    lines := {@ H : H in Split(Read(fname), "\n") @};
+    return {@ load_lmfdb_clifford_order(line) : line in lines @};
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_clifford_orders(cl::CliffAlg)->SetIndx
+//###########################
+{}
+    fname:=get_lmfdb_clifford_order_path(cl);
+    return read_lmfdb_clifford_orders(fname);
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_gamma0(fname::MonStgElt)->SetIndx
+//###########################
+{}
+    lines := {@ H : H in Split(Read(fname), "\n") @};
+    return {@ load_lmfdb_gamma0(line) : line in lines @};
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_gamma0(O::CliffOrd)->SetIndx
+//###########################
+{}
+    fname:=get_lmfdb_gamma0_path(O);
+    return read_lmfdb_gamma0(fname);
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_gamma0(sl2o::GrpPSL2Cliff)->SetIndx
+//###########################
+{}
+    O:=clifford_order(sl2o);
+    fname:=get_lmfdb_gamma0_path(O);
+    fname;
+    return read_lmfdb_gamma0(fname);
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_hecke_matrices(MS::ModSymCliff,beta::AlgMatElt)->SetIndx
+//###########################
+{}
+    fname:=get_lmfdb_hecke_path(MS,beta);
+    fname;
+    lines := {@ H : H in Split(Read(fname), "\n") @};
+    assert #lines eq 1;
+    return load_lmfdb_hecke_matrices(lines[1]);
+    //return {@ load_lmfdb_hecke_matrices(line) : line in lines @};
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_gamma02(fname::MonStgElt)->SetIndx
+//###########################
+{}
+/*
+TAD (11/16/24):
+    This was created as part of the storing Gamma0's as a single file
+    This function only returns an individual LMFDB element corresponding
+    to the label for alpha. This is the filename version.
+*/
+    lines := {@ H : H in Split(Read(fname), "\n") @};
+    return {@ load_lmfdb_gamma0(line) : line in lines @}[1];
+    //there should only be a single line in this file. Maybe this is a really dumb idea.
+end intrinsic;
+
+//###########################
+intrinsic read_lmfdb_gamma02(sl2o::GrpPSL2Cliff,alpha::AlgMatElt)->SetIndx
+//###########################
+{}
+/*
+TAD (11/16/24):
+    This was created as part of the storing Gamma0's as a single file
+    This function only returns an individual LMFDB element corresponding
+    to the label for alpha.
+*/
+    fname:=get_lmfdb_gamma0_path2(sl2o,alpha);
+    return read_lmfdb_gamma02(fname);
+end intrinsic;
+
+//###############
+//###############
+// FILE PATHS
+//###############
+//###############
+
+//###############################
+intrinsic get_lmfdb_clifford_order_path(cl::CliffAlg)->MonStgElt
+//###############################
+{}
+    SetColumns(0);
+    Folder:=get_data_folder();
+    quad_form:=jsonify_quadratic_form(cl);
+    form_label:=quadratic_form_label(quad_form);
+    d:=#quad_form[1]+1;
+    label := Sprintf("%o.%o", d, form_label);
+    path := Sprintf("%oorders/%o", Folder, label);
+    return path;
+    
+end intrinsic;
+
+
+//
+intrinsic get_data_folder()->MonStgElt
+//
+{}
+    root:=GetLMFDBRootFolder();
+    if root[#root] ne "/" then
+        root := root * "/";
+    end if;
+    Folder:=root * "DATA/";
+    return Folder;
+end intrinsic;
+
+
+//###############################
+intrinsic get_lmfdb_sl2_path(cl)->MonStgElt
+//###############################
+{}
+    
+    SetColumns(0);
+    Folder:=get_data_folder();
+    quad_form:=jsonify_quadratic_form(cl);
+    form_label:=quadratic_form_label(quad_form);
+    d:=#quad_form[1]+1;
+    label := Sprintf("%o.%o", d, form_label);
+    path := Sprintf("%osl2/%o", Folder, label);
+    return path;
+    
+end intrinsic;
+
+
+//###############################
+intrinsic get_lmfdb_gamma0_path(O::CliffOrd)->MonStgElt
+//###############################
+{}
+    SetColumns(0);
+    Folder:=get_data_folder();
+    order_label:=get_label(O);
+    label := Sprintf("%o",order_label);
+    path := Sprintf("%ogamma0/%o", Folder, label);
+    return path;
+    
+end intrinsic;
+
+//###############################
+intrinsic get_lmfdb_gamma0_path(MS::ModSymCliff)->MonStgElt
+//###############################
+{}
+    O:=clifford_order(MS);
+    return get_lmfdb_gamma0_path(O);
+end intrinsic;
+
+//###############################
+intrinsic get_lmfdb_hecke_path(MS::ModSymCliff,beta::AlgMatElt)->MonStgElt
+//###############################
+{}
+    SetColumns(0);
+    Folder:=get_data_folder();
+    O:=clifford_order(MS);
+    sl2o:=clifford_bianchi_group(MS);
+    order_label:=get_label(O);
+    label := Sprintf("%o",order_label);
+    gamma0_label:=get_label(sl2o,beta);
+    path := Sprintf("%ogamma0_hecke/%o/%o", Folder,label,gamma0_label);
+    return path;
+    
+end intrinsic;
+
+//###############################
+intrinsic get_lmfdb_gamma0_path2(sl2o::GrpPSL2Cliff,beta::AlgMatElt)->MonStgElt
+//###############################
+{}
+/*
+TAD (11/16/2024):
+    Each individual gamma0 LMFDB object is going to be stored in
+    LMFDBROOT/gamma0/<order label>/<gamma0 label>.txt
+    
+    This is so that we can manipulate each individually.
+    This is part of a re-write for gamma0 storage.
+*/
+
+    SetColumns(0);
+    Folder:=get_data_folder();
+    order_label := get_label(sl2o);
+    gamma0_label:=get_label(sl2o,beta);
+    path := Sprintf("%ogamma0/%o/%o", Folder, order_label,gamma0_label);
+    return path;
+    
+end intrinsic;
+
+//###############################
+intrinsic get_lmfdb_gamma0_path2(X::LMFDBGrpPSL2Cliff)->MonStgElt
+//###############################
+{}
+/*
+TAD (11/16/2024):
+    Each individual gamma0 LMFDB object is going to be stored in
+    LMFDBROOT/gamma0/<order label>/<gamma0 label>.txt
+    
+    This is so that we can manipulate each individually.
+    This is part of a re-write for gamma0 storage.
+*/
+
+    SetColumns(0);
+    Folder:=get_data_folder();
+    order_label:=get_label(O);
+    gamma0_label:=X`label;
+    path := Sprintf("%ogamma0/%o/%o", Folder, order_label);
+    return path;
+    
+end intrinsic;
+
+//###############
+//###############
+// WRITING TO DISC
+//###############
+//###############
+
+//#############################
+intrinsic write_lmfdb_clifford_orders(cl::CliffAlg,ords::SeqEnum: overwrite := false, timing:=" ")
+//#############################
+{}
+    datalist:=[];
+    for O in ords do
+        X:=create_lmfdb_object(O);
+        X`timing:=timing;
+        data:=SaveLMFDBObject(X);
+        Append(~datalist,data);
+    end for;
+
+    file:=get_lmfdb_clifford_order_path(cl);
+    
+    for data in datalist do
+        print_file(file, data: overwrite := overwrite);
+    end for;
+
+end intrinsic;
+
+
+//#############################
+intrinsic write_lmfdb_hecke(MS::ModSymCliff,alpha::AlgMatElt: timing:=" ", overwrite:=false)
+//#############################
+{}
+        
+    hecke_dict:=MS`hecke_matrices_tf;
+    sl2o:=clifford_bianchi_group(MS);
+    gamma0_label:=get_label(sl2o,alpha);
+    X:=create_lmfdb_object(MS,alpha:timing:=timing);
+    file:=get_lmfdb_hecke_path(MS,alpha);
+    file;
+    data:=SaveLMFDBObject(X);
+    data;
+    print_file(file, data: overwrite := overwrite);
+
+end intrinsic;
+
+//###########################
+intrinsic print_file(fname::MonStgElt,data::MonStgElt: overwrite := false)
+//###########################
+{}
+    vprintf Clifford, 4: "printing %o to %o...\n\n", data, fname;
+    
+    existing := OpenTest(fname, "r");
+    
+    
+    if existing and not overwrite then
+        vprintf Clifford, 4: "the file already exists...\n";
+        PrintFile(fname,data);
+    elif existing then
+        vprintf Clifford, 4: "the file already exists, overwrite requested...\n";
+        System(Sprintf("rm %o\n",fname));
+        PrintFile(fname,data);
+    else
+        vprintf Clifford, 4: "the file does not exist, touching...\n";
+        
+        stuff:=Split(fname,"/");
+        filename:=stuff[#stuff];
+        filepath:=&*[stuff[i] * "/" : i in [1..#stuff-2]]*stuff[#stuff-1];
+        System("mkdir -p " * filepath);
+        System("touch " * fname);
+        PrintFile(fname,data);
+    end if;
+
+end intrinsic;
+
+
+//#############################
+intrinsic write_lmfdb_clifford_order(cl::CliffAlg, X::LMFDBCliffOrd: overwrite := false)
+//#############################
+{}
+
+    SetColumns(0);
+    file:=get_lmfdb_clifford_order_path(cl);
+    data:=SaveLMFDBObject(X);
+    
+    printf "Writing to disc...\n %o ....\n \n \n",X;
+    print_file(file, data:overwrite := overwrite);
+    
+end intrinsic;
+
+//#############################
+intrinsic write_lmfdb_clifford_order(O::CliffOrd: overwrite := false, timing:=" ")
+//#############################
+{}
+    cl:=clifford_algebra(O);
+    write_lmfdb_clifford_orders(cl,[O]: overwrite := overwrite,timing:=timing);
+    
+end intrinsic;
+
+//#############################
+intrinsic write_lmfdb_sl2(cl::CliffAlg,X::LMFDBGrpSL2Cliff: overwrite := false, timing:=" ")
+//#############################
+{}
+    SetColumns(0);
+    Y:=New(LMFDBGrpSL2Cliff);
+    Y:=X;
+    if timing ne " " then
+        Y`timing:=timing;
+    end if;
+    file:=get_lmfdb_sl2_path(cl);
+    data:=SaveLMFDBObject(Y);
+    printf "Writing to disc...\n %o ....\n",Y;
+    print_file(file, data: overwrite := overwrite);
+end intrinsic;
+
+//#############################
+intrinsic write_lmfdb_sl2(PSL2O::GrpPSL2Cliff: overwrite := false,timing:=" ")
+//#############################
+{}
+    X:=create_lmfdb_object(PSL2O);
+    X`timing:=timing;
+    cl:=get_clifford_algebra(PSL2O);
+    write_lmfdb_sl2(cl,X: overwrite := overwrite);
+
+end intrinsic;
+
+//#############################
+intrinsic write_lmfdb_gamma0(X::LMFDBGrpSL2CliffGamma0: overwrite := false, timing:=" ")
+//#############################
+{}
+    SetColumns(0);
+    order_label:=X`order;
+    Y:=New(LMFDBGrpSL2CliffGamma0);
+    Y:=X;
+    Y`timing:=timing;
+    O:=clifford_order(order_label);
+    file:=get_lmfdb_gamma0_path(O);
+    data:=SaveLMFDBObject(Y);
+    print_file(file, data: overwrite := overwrite);
+ 
+end intrinsic;
+
+//#############################
+intrinsic write_lmfdb_gamma0(SL2O::GrpPSL2Cliff,beta::AlgMatElt: do_over:=false)
+//#############################
+{Compute and write a gamma0 group to disc.}
+    O1:=clifford_order(SL2O);
+    cl1:=clifford_algebra(SL2O);
+    SL2O;
+    
+    fname:=get_lmfdb_gamma0_path(O1);
+    fname;
+    
+    existing := OpenTest(fname, "r");
+    if existing then
+        //extract labels:
+        lines := {@ H : H in Split(Read(fname), "\n") @};
+        labels:={@ load_lmfdb_gamma0(line)`label : line in lines @};
+        //close the file;
+        delete existing;
+    else
+        labels:={@ @};
+    end if;
+    
+    lab:=get_label(SL2O,beta);
+    if (not lab in labels) or do_over then
+        T0:=Cputime();
+        Gamma0_fp(SL2O,beta);
+        T1:=Sprintf("%o",Cputime(T0)); //later make this into an option, see #96
+        gamma0_lmfdb:=create_lmfdb_object(SL2O,beta);
+        write_lmfdb_gamma0(gamma0_lmfdb: overwrite := do_over, timing:=T1);
+    end if;
+    
+end intrinsic;
+
+//#############################
+intrinsic write_lmfdb_gamma02(X::LMFDBGrpSL2CliffGamma0: overwrite := false)
+//#############################
+{}
+    SetColumns(0);
+    file:=get_lmfdb_gamma0_path2(X);
+    data:=SaveLMFDBObject(X);
+    print_file(file, data: overwrite := overwrite);
+ 
+end intrinsic;
+
+
+//###############
+//###############
+// READING/WRITING TOOLS
+//###############
+//###############
+
+//########################
+intrinsic jsonify_magma_element(a::AlgClffElt)->Tup
+//########################
+{}
+    elt:=Eltseq(a);
+    den:=Z!LeastCommonMultiple([Denominator(i) : i in elt]);
+    num:=[Z!den*a : a in elt];
+    return [* num,den *];
+end intrinsic;
+
+
+//########################
+intrinsic dejsonify_magma_element(cl_mag::AlgClff,json::List)->AlgClffElt
+//########################
+{}
+/*
+    EXAMPLE:
+        cl_mag:=get_magma_algebra(cl);
+        a:=get_magma_elt(random_clifford_vector(cl)^2);
+        a eq dejsonify_magma_element(cl_mag,jsonify_magma_element(a));
+        
+*/
+    num:=json[1];
+    den:=json[2];
+    return cl_mag![n/den : n in num];
+end intrinsic;
+
+//########################
+intrinsic gram_matrix(cl::CliffAlg)->AlgMatElt
+//########################
+{}
+    I:=get_I(cl);
+    return Matrix([[ Z!Eltseq((-(i1+i2)^2 + i1^2+i2^2)/2)[1] : i1 in I] : i2 in I]);
+end intrinsic;
+
+//########################
+intrinsic jsonify_quadratic_form(cl::CliffAlg)->SeqEnum
+//########################
+{}
+    gram:=gram_matrix(cl);
+    d:=Ncols(gram);
+    return [ [gram[i][j] : j in [i..d] ]: i in [1..d] ];
+end intrinsic;
+
+
+//########################
+intrinsic dejsonify_clifford_algebra(json::SeqEnum)->CliffAlg
+//########################
+{}
+    //only for diagonals for now
+    d:=#json;
+    sqs:=[-json[i][1] : i in [1..d]];
+    return clifford_algebra(sqs,Q);
+end intrinsic;
+
+//---------ORDERS-------------
+
+//########################
+intrinsic jsonify_basis(O::CliffOrd)->SeqEnum
+//########################
+{}
+    return [jsonify_magma_element(get_magma_elt(b)) : b in basis(O)];
+end intrinsic;
+
+//########################
+intrinsic jsonify_magma_element_list(my_list::SeqEnum)->SeqEnum
+//########################
+{}
+    return [jsonify_magma_element(x): x in my_list];
+end intrinsic;
+
+//########################
+intrinsic dejsonify_magma_element_list(cl_mag::AlgClff, my_list::SeqEnum)->SeqEnum
+//########################
+{}
+    return [dejsonify_magma_element(cl_mag,x): x in my_list];
+end intrinsic;
+
+//########################
+intrinsic dejsonify_order(cl::CliffAlg,basis_json::SeqEnum)->CliffOrd
+//########################
+{}
+    cl_mag:=get_magma_algebra(cl);
+    return clifford_order(Integers(),[cl!x : x in dejsonify_magma_element_list(cl_mag,basis_json)]);
+end intrinsic;
+
+
+//###########################
+intrinsic jsonify_matrix(mat::GrpMatElt)->SeqEnum
+//##########################
+{}
+    m:=Nrows(mat);
+    n:=Ncols(mat);
+    return [[jsonify_magma_element(mat[i][j]) : j in [1..n]] : i in [1..m]];
+end intrinsic;
+
+//###########################
+intrinsic jsonify_matrix(mat::AlgMatElt)->SeqEnum
+//##########################
+{}
+    cl_mag:=Parent(mat[1][1]);
+    GL2:=GeneralLinearGroup(2,cl_mag);
+    return jsonify_matrix(GL2!mat);
+end intrinsic;
+
+//----Hecke operators
+
+//##########################
+intrinsic jsonify_integer_matrix(mat::AlgMatElt[RngInt])->SeqEnum[SeqEnum[RngIntElt]]
+//##########################
+{}
+    return [Eltseq(row) : row in Rows(mat)];
+end intrinsic;
+
+//##########################
+intrinsic dejsonify_integer_matrix(seq::SeqEnum[SeqEnum[RngIntElt]])->AlgMatElt[RngInt]
+//##########################
+{}
+    return Matrix(seq);
+end intrinsic;
+
+//########################
+intrinsic dejsonify_matrix(cl_mag::AlgClff,json::SeqEnum)->AlgMatElt
+//########################
+{}
+//assumes the matrix is square
+/*
+    
+    EXAMPLES:
+        mat eq dejsonify_matrix(cl_mag,jsonify_matrix(mat));
+
+*/
+    GL2:=GL(2, cl_mag);
+    n:=#json;
+    return GL2!Matrix([[ dejsonify_magma_element(cl_mag,json[i][j]) : j in [1..n]]: i in [1..n]]);
+end intrinsic;
+
+//########################
+intrinsic jsonify_matrix_list(cl_mag::AlgClff,mat_gens::SeqEnum)->SeqEnum
+//########################
+{}
+/*
+TAD: This is very dumb. We need to get rid of this extra argument (or this intrinsic altogether).
+*/
+    return [jsonify_matrix(g) : g in mat_gens];
+end intrinsic;
+
+//########################
+intrinsic jsonify_matrix_list(mat_gens::SeqEnum)->SeqEnum
+//########################
+{The better intrinsic for jsonifying 2x2 matrices in clifford algebras for storing into LMFDB objects.}
+    return [jsonify_matrix(g) : g in mat_gens];
+end intrinsic;
+
+
+//########################
+intrinsic dejsonify_matrix_list(cl_mag::AlgClff,json::SeqEnum)->SeqEnum
+//########################
+{}
+    return [dejsonify_matrix(cl_mag,j) : j in json];
+end intrinsic;
+
+//########################
+intrinsic jsonify_relations(Gamma_quo::GrpFP)->SeqEnum
+//########################
+{}
+    rels:=Relations(Gamma_quo);
+    return [Eltseq(rel[1]) cat [-x: x in Reverse(Eltseq(rel[2]))] : rel in rels];
+end intrinsic;
+
+//########################
+intrinsic jsonify_sl2_gens(PSL2O::GrpPSL2Cliff)->SeqEnum
+//########################
+{}
+    SL2O_quo:=PSL2O`sl2_fp_group;
+    q_map:=PSL2O`sl2_to_psl2_map;
+    mat_gens:=[fp_element_to_matrix(PSL2O,q_map(g)) : g in Generators(SL2O_quo)];
+    return jsonify_matrix_list(mat_gens);
+end intrinsic;
+
+//########################
+intrinsic jsonify_sl2_rels(PSL2O::GrpPSL2Cliff)->SeqEnum
+//########################
+{}
+    SL2O_quo:=PSL2O`sl2_fp_group;
+    return jsonify_relations(SL2O_quo);
+end intrinsic;
+
+//########################
+intrinsic jsonify_matrix_to_fpgroup(PSL2O::GrpPSL2Cliff)->SeqEnum
+//########################
+{}
+    mydict:=PSL2O`mat_to_sl2quo;
+    cl_magma:=get_magma_algebra(get_clifford_algebra(PSL2O));
+    mykeys:=[k : k in Keys(mydict)];
+    GL2:=GL(2, cl_magma);
+    return [<jsonify_matrix(GL2!k),Eltseq(mydict[k])>: k in mykeys];
+end intrinsic;
+
+//########################
+intrinsic dejsonify_matrix_to_fpgroup(cl_mag::AlgClff,SL2Oquo::GrpFP,seq::List)->Assoc
+//########################
+{}
+    mydict:=AssociativeArray();
+    for x in seq do
+        mat:=dejsonify_matrix(cl_mag,x[1]);
+        if #x[2] ne 0 then
+            elt:=SL2Oquo!x[2];
+        else
+            elt:=Id(SL2Oquo);
+        end if;
+        mydict[mat]:=elt;
+    end for;
+    
+    return mydict;
+end intrinsic;
+
+//########################
+intrinsic integer_to_base62(n::RngIntElt)->StrMonElt
+//########################
+{}
+    big_alphabet:="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    q,r:=Quotrem(n,62);
+    list:=[r];
+    while q ne 0 do
+        q,r :=Quotrem(q,62);
+        list:=list cat [r];
+    end while;
+    m:=#list;
+    //&+[list[i]*62^(i-1) : i in [1..m]];
+
+    my_string:="";
+    for i in [1..m] do
+        my_string := big_alphabet[list[i]+1] cat my_string;
+    end for;
+    return my_string;
+end intrinsic;
+
+//########################
+intrinsic base62_to_integer(num::MonStgElt) -> RngIntElt
+//########################
+{Convert a string representing a number in base 62 to an integer.}
+  digits := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  n := 0;
+  for i in [1..#num] do
+    ind := Index(digits,num[i]);
+    error if ind eq 0, "invalid digit";
+    n := #digits*n + ind - 1;
+  end for;
+  return n;
+end intrinsic;
+
+
+//###############
+//###############
+// LABELS
+//###############
+//###############
+
+  
+//########################
+intrinsic quadratic_form_label(my_form::SeqEnum)->MonStgElt
+//########################
+{}
+    d:=#my_form[1];
+    my_form_label:=integer_to_base62(my_form[1][1]);
+    for i in [2..d] do
+        my_form_label:= my_form_label cat "_" cat integer_to_base62(my_form[i][1]);
+    end for;
+    return my_form_label;
+end intrinsic;
+
+//########################
+intrinsic get_label(cl::CliffAlg)->MonStgElt
+//########################
+{}
+    quad_form:=jsonify_quadratic_form(cl);
+    my_label:=IntegerToString(#quad_form[1]+1) cat "." cat quadratic_form_label(quad_form);
+    return my_label;
+end intrinsic;
+
+//########################
+intrinsic get_label(O::CliffOrd)->MonStgElt
+//########################
+{This is the label of the clifford algebra "." the discriminant "." the Hash of the order.}
+    
+    if not assigned O`label then
+        cl:=clifford_algebra(O);
+        my_label:=get_label(cl) cat ".";
+        disc:=discriminant(O);
+        if disc lt 0 then
+            my_label:=my_label cat "m";
+        end if;
+        my_label:= my_label cat IntegerToString(AbsoluteValue(discriminant(O))) cat "." cat integer_to_base62(Hash(O));
+        O`label:=my_label;
+    end if;
+    
+    return O`label;
+end intrinsic;
+
+//########################
+intrinsic get_label(O::CliffOrd)->MonStgElt
+//########################
+{}
+    cl:=get_clifford_algebra(O);
+    my_label:=get_label(cl) cat ".";
+    disc:=discriminant(O);
+    if disc lt 0 then
+        my_label:=my_label cat "m";
+    end if;
+    my_label:= my_label cat IntegerToString(AbsoluteValue(discriminant(O))) cat "." cat integer_to_base62(Hash(O));
+    return my_label;
+end intrinsic;
+
+//########################
+intrinsic get_label(sl2o::GrpPSL2Cliff,beta::AlgMatElt)->MonStgElt
+//########################
+{}
+/*
+TAD (11/16/2024):
+    This is for labelling of gamma0 LMFDB elements.
+    The scheme is <order>.<matrix element>.
+
+*/
+    O:=clifford_order(sl2o);
+    order_label:=get_label(O);
+    defining_element_label:=get_label(beta);
+    return order_label cat "." cat defining_element_label;
+end intrinsic;
+
+//###############
+//###############
+// LMFDB OBJECT GENERATION
+//###############
+//###############
+
+//########################
+intrinsic create_lmfdb_object(O::CliffOrd: timing:=" ")->LMFDBCliffOrd
+//########################
+{}
+    vprintf LMFDB,4: "creating LMFDBCliffOrd object...\n ";
+    lmfdb_ord:=New(LMFDBCliffOrd);
+    cl:=get_clifford_algebra(O);
+    lmfdb_ord`label:=get_label(O);
+    lmfdb_ord`clifford_algebra:=jsonify_quadratic_form(cl);
+    lmfdb_ord`basis:=jsonify_basis(O);
+    lmfdb_ord`is_maximal:=is_maximal(O);
+    
+    lmfdb_ord`dimension:=dimension(O);
+    lmfdb_ord`is_star_invariant:=is_star_invariant(O);
+    //lmfdb_ord`conjugates:=
+    //lmfdb_ord`is_euclidean,
+    lmfdb_ord`discriminant:=discriminant(O);
+    //lmfdb_ord`is_compatible,
+    lmfdb_ord`is_norm_euclidean:=is_norm_euclidean(O);
+    //lmfdb_ord`is_not_euclidean,
+    //lmfdb_ord`clifford_unit_group_generators:=[];
+    //lmfdb_ord`vector_lattice:=
+    //lmfdb_ord`clifford_vector_basis,
+    lmfdb_ord`timing:=timing;
+    return lmfdb_ord;
+end intrinsic;
+
+//########################
+intrinsic create_lmfdb_object(PSL2O::GrpPSL2Cliff: timing:=" ")->LMFDBGrpSL2Cliff
+//########################
+{}
+    O:=get_clifford_order(PSL2O);
+    cl:=clifford_algebra(O);
+    cl_mag:=get_magma_algebra(cl);
+    sl2_lmfdb:=New(LMFDBGrpSL2Cliff);
+    sl2_lmfdb`label:=get_label(O);
+    sl2_lmfdb`matrix_generators:=jsonify_matrix_list(Generators(PSL2O));
+    sl2_lmfdb`order:=get_label(O);
+    sl2_lmfdb`relations:=Relations(PSL2O);
+    sl2_lmfdb`matrix_to_fpgroup:=jsonify_matrix_to_fpgroup(PSL2O);
+    sl2_lmfdb`timing:=timing;
+    return sl2_lmfdb;
+end intrinsic;
+
+//########################
+intrinsic create_lmfdb_object(SL2O::GrpPSL2Cliff,alpha::AlgMatElt)->LMFDBGrpSL2CliffGamma0
+//########################
+{The user is not resposible for checking that gamma0 is actually a subgroup of SL2O`sl2_fp_group.
+They can use the map to actually determine the subgroup.
+}
+    /*
+    TAD (11/16/24):
+        This is a better version of the above one.
+        This assume that the user has computed gamma0(alpha) for the particular alpha and hence can refer to the table.
+    
+    */
+    gamma0,map:=Explode(SL2O`gamma0fp_dict[alpha]);
+    sl2_quo:=SL2O`sl2_fp_group; //not sure why I need to call this again
+    R,get_rep:=RightTransversal(sl2_quo,map(gamma0));
+    
+    O:=get_clifford_order(SL2O);
+    cl:=clifford_algebra(O);
+    cl_mag:=get_algebra(O);
+    
+    vec_dim:=#cl`vecs;
+    
+    /*-----
+        Got rid of the testing here. The testing should really be done earlier.
+    */
+    
+    order_label:=get_label(O);
+    gens_mat:=[fp_element_to_matrix(SL2O,map(g)) : g in Generators(gamma0)];
+    gens_fp:=[Eltseq(sl2_quo!map(g)) : g in Generators(gamma0)];
+    reps_mat:=[fp_element_to_matrix(SL2O,r) : r in R];
+    defining_element:=jsonify_matrix(alpha);
+    defining_element_label:=get_label(alpha);
+    matrix_generators:=jsonify_matrix_list(cl_mag,gens_mat);
+    group_label:=order_label cat "." cat defining_element_label;
+    fp_generators:=gens_fp;
+    relations:=[Eltseq(r[1]*r[2]^(-1)) : r in Relations(gamma0)];
+    group_index:=#R;
+    gamma0_ab:=AbelianQuotient(gamma0);
+    abelianization:=Invariants(gamma0_ab);
+    rank:=TorsionFreeRank(gamma0_ab);
+    matrix_coset_representatives:=jsonify_matrix_list(cl_mag,reps_mat);
+    fp_coset_representatives:=[Eltseq(r) : r in R];
+        
+    /*-----
+        SAVE
+    */
+    
+    gamma0_lmfdb:=New(LMFDBGrpSL2CliffGamma0);
+    
+    if pdet(alpha)[1] in Z then
+        gamma0_lmfdb`level_norm:= Z!pdet(alpha)[1];
+    else
+        assert pdet(alpha^-1) in Z;
+        gamma0_lmfdb`level_norm:= Z!pdet(alpha^-1)[1];
+    end if; //this is an improper handling of the level. It should be changed to a rational number. 
+    
+    gamma0_lmfdb`order:=order_label;
+    gamma0_lmfdb`defining_element:=defining_element;
+    gamma0_lmfdb`defining_element_label:=defining_element_label;
+    gamma0_lmfdb`label:=group_label;
+    gamma0_lmfdb`matrix_generators:=matrix_generators;
+    gamma0_lmfdb`fp_generators:=fp_generators;
+    gamma0_lmfdb`relations:=relations;
+    gamma0_lmfdb`index:=group_index;
+    gamma0_lmfdb`abelianization:=abelianization;
+    gamma0_lmfdb`rank:=rank;
+    //gamma0_lmfdb`manin_rank:=;
+    gamma0_lmfdb`matrix_coset_representatives:=matrix_coset_representatives;
+    gamma0_lmfdb`fp_coset_representatives:=fp_coset_representatives;
+    
+    return gamma0_lmfdb;
+    
+end intrinsic;
+
+
+//########################
+intrinsic get_label(beta::AlgMatElt)->MonStgElt
+//########################
+{}
+    return integer_to_base62(Hash(beta));
+end intrinsic;
+
+//########################
+intrinsic create_lmfdb_object(MS::ModSymCliff,beta::AlgMatElt : timing:=" ")->LMFDBHeckeMatrices
+//########################
+{}
+    hecke_dict:=MS`hecke_matrices_tf;
+    sl2o:=clifford_bianchi_group(MS);
+    gamma0_label:=get_label(sl2o,beta);
+    keys:=[k:k in Keys(hecke_dict)];
+    hecke_LMFDB:=New(LMFDBHeckeMatrices);
+    hecke_LMFDB`gamma0_label:=gamma0_label;
+    hecke_LMFDB`clifford_matrices:=jsonify_matrix_list(keys);
+    hecke_LMFDB`timing:=timing;
+    hecke_LMFDB`hecke_matrices:=[jsonify_integer_matrix(hecke_dict[k]) : k in keys];
+    return hecke_LMFDB;
+
+end intrinsic;
+
+//###########################
+intrinsic clifford_order_lmfdb(label::MonStgElt)->CliffOrdLMFDB
+//###########################
+{}
+    words:=Split(label,".");
+    n:=StringToInteger(words[1]);
+    sqs:=[-base62_to_integer(s): s in Split(words[2],"_")];
+    cl:=clifford_algebra(Q,sqs);
+    lmfdb_ords:=read_lmfdb_clifford_orders(cl);
+    for lmfdb_ord in lmfdb_ords do
+        if lmfdb_ord`label eq label then
+            return lmfdb_ord;
+        end if;
+    end for;
+    
+    error "No lmfdb order of that label was found";
+    
+end intrinsic;
+
+//###########################
+intrinsic sl2_lmfdb(label::MonStgElt)->LMFDBGrpSL2Cliff
+//###########################
+{}
+    O:=clifford_order(label);
+    cl:=get_clifford_algebra(O);
+    
+    order_label:=get_label(O);
+    list:=read_lmfdb_sl2(cl);
+    for elt in list do
+        if Get(elt,"label") eq order_label then
+            return elt;
+        end if;
+    end for;
+end intrinsic;
+
+//###############
+//###############
+// MAGMA OBJECT GENERATION
+//###############
+//###############
+
+
+//###########################
+intrinsic clifford_order(X::LMFDBCliffOrd)->CliffOrd
+//###########################
+{}
+    cl1:=dejsonify_clifford_algebra(X`clifford_algebra);
+    O1:=dejsonify_order(cl1,X`basis);
+    O1`is_maximal:=X`is_maximal;
+    return O1;
+end intrinsic;
+
+//###########################
+intrinsic load_clifford_orders(cl::CliffAlg)->CliffOrd
+//###########################
+{}
+    return {@ clifford_order(X) : X in read_lmfdb_clifford_orders(cl) @};
+end intrinsic;
+
+/*
+function load_clifford_orders(cl::CliffAlg)
+    fname:=get_lmfdb_clifford_order_path(cl);
+    fname;
+    existing := OpenTest(fname, "r");//maybe we need to close this too
+    if existing then
+        //do something
+        lines := {@ H : H in Split(Read(fname), "\n") @};
+        ords:={@ clifford_order(load_lmfdb_clifford_order(line)) : line in lines @};
+    else
+        ords:={@ @};
+    end if;
+    //close the file;
+    delete existing;
+    
+    return ords;
+end function;
+*/
+
+//###########################
+intrinsic clifford_order(label::MonStgElt)->CliffOrd
+//###########################
+{}
+    return clifford_order(clifford_order_lmfdb(label));
+end intrinsic;
+
+//##################
+intrinsic clifford_bianchi_group(label::MonStgElt)->GrpPSL2Cliff
+//##################
+{}
+    SL2O_lmfdb:=sl2_lmfdb(label);
+    relations:=SL2O_lmfdb`relations;
+    O:=clifford_order(label);
+    cl:=get_clifford_algebra(O);
+    cl_magma:=get_magma_algebra(cl);
+ 
+    GL2:=GL(2, cl_magma);
+    M2:=MatrixAlgebra(cl_magma,2);
+    group_generators:=[M2!g: g in dejsonify_matrix_list(cl_magma,SL2O_lmfdb`matrix_generators)];
+    
+    return clifford_bianchi_group(O,group_generators,relations);
+
+end intrinsic;
+
+intrinsic load_clifford_bianchi_group(O::CliffOrd)->GrpPSL2Cliff
+{}
+    return clifford_bianchi_group(get_label(O));
+end intrinsic;
+
+//####################
+intrinsic Gamma0_fp(SL2O::GrpPSL2Cliff,alpha_label::MonStgElt: redo := false) -> GrpFP, Map, SeqEnum
+//####################
+{Get the finitely presented Gamma0 group from storage.}
+    if not assigned SL2O`gamma0fp_dict then
+        SL2O`gamma0fp_dict:=AssociativeArray();
+    end if;
+    
+    from_file:=read_lmfdb_gamma0(SL2O);
+    
+    O:=get_clifford_order(SL2O);
+    cl:=get_clifford_algebra(O);
+    cl_mag:=get_algebra(cl);
+    
+    T0:=Time();
+    vprintf LMFDB, 2: "loading... \n";
+    from_file:=[x : x in read_lmfdb_gamma0(SL2O)];
+    T1:=Time(T0);
+    vprintf LMFDB, 2: "%o seconds... \n",T1;
+    
+    found_gamma0:=false;
+    i:=1;
+    for X in from_file do
+        vprintf LMFDB, 2: "percentage complete: %o \n", RealField(2)!Index(from_file,X)/#from_file;
+        gamma0_lmfdb:=X;
+        sl2quo:=sl2_fp(SL2O);
+        beta:=dejsonify_matrix(cl_mag,gamma0_lmfdb`defining_element);
+        if gamma0_lmfdb`defining_element_label eq alpha_label then
+            found_element:=true;
+            alpha:=beta;
+        end if;
+        fp_generators:=gamma0_lmfdb`fp_generators;
+        relations:=gamma0_lmfdb`relations;
+        
+        F:=FreeGroup(#fp_generators);
+        gamma0,map := quo< F | relations>;
+        imgs:=[&*[sl2quo.x : x in y] : y in fp_generators];
+        inclusion:=hom<gamma0->sl2quo | imgs >;
+        gamma0_sub:=inclusion(gamma0);
+        gens_from_conversion:=[fp_element_to_matrix(SL2O,g) : g in Generators(gamma0_sub)];
+        SL2O`gamma0fp_dict[beta]:=<gamma0,inclusion,gens_from_conversion>;
+    end for;
+    
+    
+    if not found_element then
+        error "There is no element for the given label in storage.";
+    else
+        return SL2O`gamma0fp_dict[alpha][1];
+    end if;
+    
+end intrinsic;
+
+//####################
+intrinsic load_Gamma0_fp(SL2O::GrpPSL2Cliff,alpha::AlgMatElt: redo := false) -> GrpFP, Map, SeqEnum
+//####################
+{}
+    cl:=clifford_algebra(SL2O);
+    alpha_label:=get_label(alpha);
+    return Gamma0_fp(SL2O,alpha_label);
+end intrinsic;
+
+//####################
+intrinsic load_hecke_matrices_tf(MS::ModSymCliff,beta::AlgMatElt)->Assoc
+//####################
+{}
+    if not assigned MS`hecke_matrices_tf then
+        MS`hecke_matrices_tf:=AssociativeArray();
+    end if;
+    
+    cl_mag:=magma_algebra(MS);
+    hecke_mats_lmfdb:=read_lmfdb_hecke_matrices(MS,beta);
+    alpha_list_json:=hecke_mats_lmfdb`clifford_matrices;
+    
+    alpha_list:=dejsonify_matrix_list(cl_mag,alpha_list_json);
+    hecke_mats_tf:=[dejsonify_integer_matrix(x) : x in hecke_mats_lmfdb`hecke_matrices];
+    
+    num_mats:=#alpha_list;
+    assert num_mats eq #hecke_mats_tf;
+    
+    for i in [1..num_mats] do
+        alpha:=alpha_list[i];
+        Talpha:=hecke_mats_tf[i];
+        if not alpha in Keys(MS`hecke_matrices_tf) then
+            MS`hecke_matrices_tf[alpha]:=Talpha;
+        end if;
+    end for;
+    
+    return MS`hecke_matrices_tf;
+
+end intrinsic;
