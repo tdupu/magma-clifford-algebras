@@ -1,0 +1,1787 @@
+
+//the template for this package is https://magma.maths.usyd.edu.au/magma/handbook/text/1668#18928
+
+declare type ModSymCliff[ModSymCliffElt];
+declare attributes ModSymCliff: finite_index_subgroup_fp,psl2o,right_transversals,right_transversal_map,quo_to_free,free_to_quo,quo_to_manin,manin_to_quo,free_module,manin_module,clifford_algebra,magma_algebra,clifford_order,fp_group_to_free_module,free_module_to_fp_group,free_to_manin_map,quo_to_man_func,man_to_quo_func,manin,man_to_abs_func,abs_to_man_func, random_manin_symbol,cusps,hecke_matrices,relations,subgroup_matrix_generators,abs_to_free_func,free_to_abs_func,abs_to_free_cusp_func,free_to_abs_cusp_func, right_transversal_matrices,manin_module_tf,manin_module_tf_map,hecke_matrices_tf,matrix_algebra, hecke_algebra_tf,eigenspaces;
+
+declare attributes ModSymCliffElt: parent,assoc,elt,cusps,magma_algebra,clifford_algebra;
+
+//import "coset-table.mag": presentation,coset_table; //this already appears as an intrinsic in coset-table.mag which should probably be moved to package-magma-fixes.mag.
+
+infty:=Infinity();
+Z:=Integers();
+Q:=RationalField();
+
+//#####################
+function random_rational();
+//#####################
+    numerator := Random([-1000..1000]); // Choose a random integer in the range -1000 to 1000
+    denominator := Random([1..1000]);   // Choose a random positive integer in the range 1 to 1000
+    return Q ! (numerator / denominator);
+end function;
+
+//#####################
+random_integer:=func<|Z ! Random([-1000..1000])>;
+//#####################
+
+////////////////////
+intrinsic modular_symbols(SL2O::GrpPSL2Cliff,PSigma::GrpFP)->ModSymCliff
+////////////////////
+{Alias for modular symbols with the signature flipped.}
+    return modular_symbols(PSigma,SL2O);
+end intrinsic;
+
+//#############################
+intrinsic modular_symbols(Gammaquo::GrpFP,PSL2O::GrpPSL2Cliff : method:="deterministic", cycle_sample_size:=1000,
+        action_percentage:=0.3, num_rels:=10000, len:=20, coset_method:="fp_group", scramble:=false) -> ModSymCliff
+//#############################
+{
+Compute the group of modular symbols for a finite index subgroup PGamma in PSL2(O).
+}
+    base_ring:=Integers();
+    MS:=New(ModSymCliff);
+    
+    PSL2Oquo:=fp_group(PSL2O);   //improvement for abstract class PSL2O:=supergroup(Gamma);
+    cl:=get_clifford_algebra(PSL2O);
+    cusp_set:=cusps(cl);
+    act:=cusp_set`action;
+    //zero:=cusp(cl!0);
+    //infty:=cusp(infty);
+    O:=get_clifford_order(PSL2O);
+    cl_mag:=get_magma_algebra(cl);
+    O_mag:=get_magma_order(O);
+    Inds:=get_vector_indices(cl);
+    Zn:=get_clifford_lattice(cl);
+    Qn:=get_vector_space(cl);
+    zero_c:=zero(cusp_set);
+    infty_c:=infinity(cusp_set);
+  
+    if coset_method eq "fp_group" then
+      vprintf Clifford, 4: "creating right transversal ... ";
+      vtime Clifford, 4: R,get_rep:=RightTransversal(PSL2Oquo,Gammaquo);
+        
+        // We store these representatives in the cache inside the PSL2O object which helps with matrix group to finitely presented group conversion.
+        
+        rep_mats:=[MatrixAlgebra(cl`alg,2)|];
+
+        vprintf Clifford, 5: "converting %o elements to matrices ", #R;
+        for r in R do
+          vprintf Clifford, 6: ".";
+            r_quo:=PSL2Oquo!r;
+            r_mat:=fp_element_to_matrix(PSL2O,r_quo);
+            PSL2O`psl2quo_to_mat[r_quo]:=r_mat;
+            PSL2O`psl2quo_to_mat[r_quo^-1]:=r_mat^-1;
+            PSL2O`mat_to_psl2quo[r_mat]:=r_quo;
+            PSL2O`mat_to_psl2quo[r_mat^-1]:=r_quo^-1;
+            Append(~rep_mats,r_mat);
+        end for;
+        vprintf Clifford, 5: "\n";
+    elif coset_method eq "adam" then
+    
+        //put adam's code here
+    
+    end if;
+    
+    //The free abelian group on coset representatives has a surjective map to the modular symbols. A quotient of this free abelian group will be the group of Manin symbols.
+    MSfree:=FreeAbelianGroup(#R);
+
+    quo_to_free:=AssociativeArray();
+    free_to_quo:=AssociativeArray();
+    
+    id_mat:=Matrix(2,2,[cl! 1,cl! 0,cl! 0,cl ! 1]);
+    id_sl2:=matrix_to_fp_element(PSL2O,id_mat);
+    
+    quo_to_free[get_rep(id_sl2)]:=id_sl2;
+
+    vprint Clifford, 5: "creating some coercions";
+    for i in [1..#R] do
+        quo_to_free[R[i]]:=MSfree.i;
+        free_to_quo[MSfree.i]:=R[i];
+    end for;
+
+    // AML: the next line is slow because Gammaquo comes with a massive pile
+    // of generators.  It can be improved by reducing the generators first.
+    // subgroup_mats:=[fp_element_to_matrix(PSL2O,g) : g in Generators(Gammaquo)];
+    // but it's annoying that apparently you can only do this once.
+    vprint Clifford, 4: "trying to reduce the group";
+    try
+      vtime Clifford, 4: red_gammaquo,red_to_gammaquo := ReduceGenerators(Gammaquo);
+    catch e vprint Clifford, 4: "failing (perhaps because of a bug that prevents the same group from being reduced twice)";
+      red_gammaquo := Gammaquo; red_to_gammaquo := hom<Gammaquo->Gammaquo|[Gammaquo.i: i in [1..Ngens(Gammaquo)]]>;
+    end try;
+    // I suspect that we should just use red_gammaquo instead of Gammaquo.
+    subgroup_mats_red := [fp_element_to_matrix(PSL2O,red_gammaquo.i): i in [1..Ngens(red_gammaquo)]];
+    vprint Clifford, 4: "finding the generators as matrices";
+    vtime Clifford, 4: subgroup_mats := [evaluate_relation(subgroup_mats_red,Eltseq(red_gammaquo!red_to_gammaquo(Gammaquo.i))): i in [1..Ngens(Gammaquo)]];
+    
+    //%%%%%%%%%%%%%%%%%%%%%%
+    function free_to_abs(c)
+    //%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    Given a vector v in the free abelian group corresponding to the coset representatives we map v_i = \sum c_i e_i to sum c_i (M_i) where M_i is the ith representative and the parentheses denote the principal modular symbol associated to a matrix.
+    
+        INPUT:
+            --c, a vector corresponding to a Manin symbol, here this is just an element of the free abelian group.
+            
+        OUTPUT:
+            --a tuple of <<a,b>,c> for a,b rational Clifford vectors or infinity.
+        
+        Note that this uses comparisons of Clifford vectors which apparently makes sense.
+            a0 := I[1];
+            b0 := I[2];
+            a0 lt b0;
+            
+    */
+        abstract_symbol_tuple := <>;
+        keys:=<>;
+        
+        //---printing---
+        vprintf Clifford,4: "Making principal symbols associated to coset representatives...\n";
+        
+        /*
+        Make an intrinsic for principal symbols.
+        Also, call these on cusps, so as to not manage types.
+
+        */
+        
+        for i in [1..#R] do
+            g:=fp_element_to_matrix(R[i]);//to matrix
+            ci:=c[i];
+            if ci ne 0 then
+                ai:=act(g,0);
+                bi:=act(g,infty);
+                if Type(ai) eq Infty and Type(ai) eq Type(bi) then
+                    //do nothing
+                elif (Type(ai) eq Infty) then
+                    keys:=keys cat <bi,ai>;
+                    Append(~abstract_symbol_tuple,<-ci,<bi,ai>>);
+                elif (Type(bi) eq Infty) then
+                    keys:=keys cat <ai,bi>;
+                    Append(~abstract_symbol_tuple,<ci,<ai,bi>>);
+                elif (ai gt bi) then
+                    keys:=keys cat <bi,ai>;
+                    Append(~abstract_symbol_tuple,<-ci,<bi,ai>>);
+                elif (bi gt ai) then
+                    keys:=keys cat <ai,bi>;
+                    Append(~abstract_symbol_tuple,<ci,<ai,bi>>);
+                end if;
+            end if;
+        end for;
+        
+        return abstract_symbol_tuple;
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%
+    function free_to_abs_cusp(c)
+    //%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    Given a vector v in the free abelian group corresponding to the coset representatives we map v_i = \sum c_i e_i to sum c_i (M_i) where M_i is the ith representative and the parentheses denote the principal modular symbol associated to a matrix.
+    
+        INPUT:
+            --c, a vector corresponding to a Manin symbol, here this is just an element of the free abelian group.
+            
+        OUTPUT:
+            --a tuple of <<a,b>,c> for a,b cusps
+        
+        Note that this uses comparisons of Clifford vectors which apparently makes sense.
+            a0 := I[1];
+            b0 := I[2];
+            a0 lt b0;
+            
+    */
+        abstract_symbol_tuple := <>;
+        keys:=<>;
+        
+        //---printing---
+        vprintf Clifford,4: "Making principal symbols associated to coset representatives...\n";
+        
+        /*
+        Make an intrinsic for principal symbols.
+        Also, call these on cusps, so as to not manage types.
+
+        */
+        
+        
+        for i in [1..#R] do
+            g:=fp_element_to_matrix(R[i]);//to matrix
+            ci:=c[i];
+            if ci ne 0 then
+                ai:=g(zero_c);
+                bi:=g(infty_c);
+                if ai eq bi then
+                    //do nothing
+                elif (ai gt bi) then
+                    keys:=keys cat <bi,ai>;
+                    Append(~abstract_symbol_tuple,<-ci,<bi,ai>>);
+                elif (bi gt ai) then
+                    keys:=keys cat <ai,bi>;
+                    Append(~abstract_symbol_tuple,<ci,<ai,bi>>);
+                end if;
+            end if;
+        end for;
+        
+        return abstract_symbol_tuple;
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function abs_to_free(my_abstract_symbol)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    Converts abstract modular symbols to c symbols. This is the raw version.
+        
+        INPUT:
+            --my_abstract_symbol, a modular symbol presented as a list of
+                [[a,b],c] where c is a rational number and a,b clifford vectors
+            
+        OUTPUT:
+            --c, an element of finite dimensional vectors space
+                of dimension |Gamma/SL2(O)|
+                
+        The procedure takes [[a,b],c] considered as c*[a,b] then writes is as c([oo,b]-[oo,a]).
+        Each of the symbols [oo,x] are computed separately by computing the matrices A1,...,Ar
+        such that Ai(infty)=ai is the ith convergent of x. We have
+           [oo,x] = [oo,a1]+[a1,a2] + ... + [a(r-1),ar]
+        and each symbol looks like [Ai(0),Ai(infty)] in this linear combination. These all have
+        the form Ai = CR where C is in Gamma and R is a coset representative. This means that
+        [Ai(0),Ai(infty)] = [C R(0),C R(infty)] = (R) and the (R) are the generators of the Manin
+        symbols.
+
+            magma: my_abstract_symbol := [* [* 3, [* I[1]+I[2]/4, 1/24+I[2] *] *],[* -1/5, [* I[1]/5-I[2]/4, 1+I[2]/15 *] *] *];
+            magma: abstract_to_free(my_abstract_symbol, O, cl, Inds, Zn, Qn, is_vec, star, get_rep, get_manin_dict,translate_to_quo_dict, cob_matrix,vecO_basis);
+            ( 2/5 -1/5    0 -1/5  2/5    0)
+            
+    */
+    //These names are bad. They are really not elements of "manin" which is the quotient module defined later. The naming is bad because this was pulled from an earlier implementation.
+         
+        //-----------------
+        function abstract_to_free_basic(x)
+        //-----------------
+            if Type(x) eq Infty then
+                id_mat:=IdentityMatrix(cl_mag,2);
+                id_psl2:=matrix_to_fp_element(PSL2O,id_mat);
+                return quo_to_free[get_rep(id_psl2)];
+            else
+                M, A, M_quo, A_quo := get_convergents(PSL2O,x);
+                        
+                return &+[quo_to_free[get_rep(A_quo[i])] : i in [1..#A_quo]];
+            end if;
+        end function;
+        
+        //-----------------
+        function abstract_to_free_single(one_symbol)
+        //-----------------
+            coeff := one_symbol[2];
+            a := one_symbol[1][1];
+            b := one_symbol[1][2];
+            
+            //---printing---
+            vprintf Clifford, 4: "in abstract_to_free: type a=%o...\n",Type(a);
+        
+            // Handle the non-basic case
+            if Type(a) eq Infty then
+                return coeff*abstract_to_free_basic(b);
+            elif Type(b) eq Infty then
+                return -coeff*abstract_to_free_basic(a);
+            else
+                manin_symbol_a := abstract_to_free_basic(a);
+                manin_symbol_b := abstract_to_free_basic(b);
+                return coeff * (manin_symbol_b - manin_symbol_a);
+            end if;
+        end function;
+        
+        return &+[abstract_to_free_single(s) : s in my_abstract_symbol];
+    end function;
+    
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function abs_to_free_cusp(my_abstract_symbol)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    /*
+    Converts abstract modular symbols to c symbols. This is the raw version.
+        
+        INPUT:
+            --my_abstract_symbol, a modular symbol presented as a list of
+                [[a,b],c] where c is a rational number and a,b cusps
+            
+        OUTPUT:
+            --c, an element of finite dimensional vectors space
+                of dimension |Gamma/SL2(O)|
+                
+        The procedure takes [[a,b],c] considered as c*[a,b] then writes is as c([oo,b]-[oo,a]).
+        Each of the symbols [oo,x] are computed separately by computing the matrices A1,...,Ar
+        such that Ai(infty)=ai is the ith convergent of x. We have
+           [oo,x] = [oo,a1]+[a1,a2] + ... + [a(r-1),ar]
+        and each symbol looks like [Ai(0),Ai(infty)] in this linear combination. These all have
+        the form Ai = CR where C is in Gamma and R is a coset representative. This means that
+        [Ai(0),Ai(infty)] = [C R(0),C R(infty)] = (R) and the (R) are the generators of the Manin
+        symbols.
+
+            magma: my_abstract_symbol := [* [* 3, [* I[1]+I[2]/4, 1/24+I[2] *] *],[* -1/5, [* I[1]/5-I[2]/4, 1+I[2]/15 *] *] *];
+            magma: abstract_to_free(my_abstract_symbol, O, cl, Inds, Zn, Qn, is_vec, star, get_rep, get_manin_dict,translate_to_quo_dict, cob_matrix,vecO_basis);
+            ( 2/5 -1/5    0 -1/5  2/5    0)
+            
+    */
+    //These names are bad. They are really not elements of "manin" which is the quotient module defined later. The naming is bad because this was pulled from an earlier implementation.
+         
+        //-----------------
+        function abstract_to_free_basic(x)
+        //-----------------
+            if is_infinite(x) then
+                //id_mat:=IdentityMatrix(cl_mag,2);
+                //id_psl2:=matrix_to_fp_element(PSL2O,id_mat);
+                //return quo_to_free[get_rep(id_psl2)];
+                return MSfree!0;
+            else
+                x_cl:=cl!x;
+                M, A, M_quo, A_quo := get_convergents(PSL2O,x_cl);
+                        
+                return &+[quo_to_free[get_rep(A_quo[i])] : i in [1..#A_quo]];
+            end if;
+        end function;
+        
+        //-----------------
+        function abstract_to_free_single(one_symbol)
+        //-----------------
+            coeff := one_symbol[2];
+            a := one_symbol[1][1];
+            b := one_symbol[1][2];
+            
+            //---printing---
+            vprintf Clifford, 4: "in abstract_to_free: type a=%o...\n",Type(a);
+        
+            // Handle the non-basic case
+            if is_infinite(a) then
+                return coeff*abstract_to_free_basic(b);
+            elif is_infinite(b) then
+                return -coeff*abstract_to_free_basic(a);
+            else
+                manin_symbol_a := abstract_to_free_basic(a);
+                manin_symbol_b := abstract_to_free_basic(b);
+                return coeff * (manin_symbol_b - manin_symbol_a);
+            end if;
+        end function;
+        
+        return &+[abstract_to_free_single(s) : s in my_abstract_symbol];
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function random_relation_basic_abs( :len:=20);
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        pair:=random_basic_symbol_crude(cl);
+        g:=random_product(subgroup_mats :len:=len);
+        gpair:=<act(g,pair[1]),act(g,pair[2])>;
+        return <<pair,1>,<gpair,-1>>;
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function random_relation_basic_abs_cusp( :len:=20);
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        elts:=random_basic_symbol_crude(cl);
+        g:=random_product(subgroup_mats :len:=len);
+        a:=cusp_set ! elts[1];
+        b:=cusp_set ! elts[2];
+        return <<<a,b>,1>,<<g*a,g*b>,-1>>;
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function random_relation_basic_man();
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        return abs_to_free(random_relation_basic_abs());
+    end function;
+
+    //--------------------------------------------------
+    //Now we are going to take a quotient of MSfree.
+    //1) Let T(v) = abs_to_free(free_to_abs(v)). The relations are given by v-T(v).
+    //2) {infty,a} eq {g(infty),g(a)} for many a.
+    // in the current version random_relation_basic and random_relation_basic_man are not used.
+    //----------------------------------------------------
+    /*
+    This is wrong. --Taylor, October 2025
+    
+    */
+    
+    relations:=[];
+    
+    //----------------------------------------------------
+    //---------------random sample ----------------------
+    //----------------------------------------------------
+    if method eq "random_sample" then
+    
+        //---------------------
+        function get_triple_relation_abs(triple)
+        //---------------------
+            abc:=[a: a in triple];
+            a:=abc[1];
+            b:=abc[2];
+            c:=abc[3];
+            cycle_rel:=< <<a,b>,1> , <<b,c>,1>, <<c,a>,1> >;
+            return cycle_rel;
+        end function;
+    
+        sample_size:=cycle_sample_size;
+        percentage:=action_percentage;
+    
+        end_points:={@ g*zero_c : g in rep_mats @} join {@ g*infty_c : g in rep_mats @};
+
+        vprintf Clifford,5: "making one relation for each of the %o generators of the free abelian group ", #Generators(MSfree);
+        for i in [1..#Generators(MSfree)] do
+          vprintf Clifford,6: ".";
+            vi:=MSfree.i;
+            Ri:=fp_element_to_matrix(PSL2O,free_to_quo[vi]);
+            basici:=<<Ri*zero_c,Ri*infty_c>,1>; //these are "crude"
+            my_abs:=<basici>;
+            relation:= MSfree.i - abs_to_free_cusp(my_abs);
+            Append(~relations,relation);
+        end for;
+        vprintf Clifford,5: "\n";
+        //<infty,x> = <g infty, g x>
+        //The g's here can be randomized
+        set_sm := {@x: x in subgroup_mats@};
+        set_ep := {@x: x in end_points@};
+        // pairs:={ <g,x> : g in Set(subgroup_mats), x in Set(end_points) };
+        sample_size:=Ceiling(percentage*#set_sm*#set_ep);
+        sample_inds:=RandomSubset({1..#set_sm*#set_ep},sample_size);
+        sample := [<set_sm[(i-1) div #set_ep+1],set_ep[i mod #set_ep+1]>: i in sample_inds];
+        
+        vprintf Clifford,5: "making %o action relations ", #sample;
+        for a in [b: b in sample] do
+          vprintf Clifford,6: ".";
+            g:=a[1];
+            x:=a[2];
+            action_rel:= abs_to_free_cusp(< <<infty_c,x>,1>, <<g*infty_c,g*x>,-1> >);
+            Append(~relations,action_rel);
+        end for;
+        vprintf Clifford,5: "\n";
+    
+        if #end_points gt 2 then
+          vprintf Clifford,5: "making %o triple relations ", sample_size;
+          triples:={@ RandomSubset(set_ep,3) : i in [1..sample_size] @} where set_ep is {x : x in end_points};
+          for triple in triples do
+            vprintf Clifford,6: ".";
+            Append(~relations,abs_to_free_cusp(get_triple_relation_abs(triple)));
+          end for;
+          vprintf Clifford,5: "\n";
+        end if;
+        
+    //----------------------------------------------------
+    //---------------random relations ----------------------
+    //----------------------------------------------------
+    if method eq "random_relations" then
+        
+        for i in [1..#Generators(MSfree)] do
+            vi:=MSfree.i;
+            Ri:=fp_element_to_matrix(PSL2O,free_to_quo[vi]);
+            basici:=<<Ri*zero_c,Ri*infty_c>,1>; //these are "crude"
+            my_abs:=<basici>;
+            relation:= MSfree.i - abs_to_free_cusp(my_abs);
+            Append(~relations,relation);
+        end for;
+        
+        //spam random relations in no particular order for a given size
+        
+        Append(~relations,[ random_relation_basic_man() : i in [1..cycle_sample_size]]);
+        
+    end if;
+        
+    //------------------------------------------------------
+    //---------------deterministic relations ---------------
+    //------------------------------------------------------
+    elif method eq "deterministic" or "hecke" then
+    
+        end_points:={@ g*zero_c : g in subgroup_mats @} join {@ g*infty_c : g in subgroup_mats @};
+    
+        for i in [1..#Generators(MSfree)] do
+            vi:=MSfree.i;
+            Ri:=fp_element_to_matrix(PSL2O,free_to_quo[vi]);
+            basici:=<<Ri*zero_c,Ri*infty_c>,1>; //these are "crude"
+            my_abs:=<basici>;
+            relation:= MSfree.i - abs_to_free_cusp(my_abs);
+            Append(~relations,relation);
+        end for;
+        
+        for x in end_points do
+            for g in subgroup_mats do
+                if x ne infty_c then
+                    action_rel_abs:= < <<infty_c,x>,1>, <<g*infty_c,g*x>,-1> >;
+                    action_rel:=abs_to_free_cusp(action_rel_abs);
+                    Append(~relations,action_rel);
+                end if;
+            end for;
+            vprintf Clifford,5: "completed %o out of %o... \n", Index(end_points,x),#end_points;
+        end for;
+    
+    //------------------------------------------------------
+    //---------------hecke relations ----------------------
+    //------------------------------------------------------
+    elif method eq "hecke" then
+    
+        error "Not implemented";
+    
+    end if;
+    
+    //This is the quotient
+    MSquo,q_map:=quo<MSfree|Set(relations)>;
+    
+    
+    //We cache the relationships between the coset representatives and the elements of the quotient abelian group that are in bijection with them. They just come extending the setup we had previously.
+    // AML: in general they do not seem to be in bijection, nor do we always
+    // get all the generators.  This causes all sorts of problems later,
+    // which I try to fix in some of the code below.
+    
+    /*
+    Sorry, I think we *do* get all of the generators. This is what we proved.
+    */
+
+    quo_to_man:=AssociativeArray();
+    man_to_quo:=AssociativeArray();
+
+    for i in [1..#R] do
+        quo_to_man[R[i]]:=q_map(MSfree.i);
+        man_to_quo[q_map(MSfree.i)]:=R[i];
+    end for;
+    
+    /*
+    The elements of MSfree that map to generators of MSquo are (MSquo.i @@ q_map).
+    */
+    
+    /*
+    Adam says: we do not get all of the generators of MSquo among the keys of man_to_quo.
+    */
+    
+    // AML: !!! danger: I am not sure this is safe.  Taylor, please have a
+    // look and tell me what you think.  If not we need to make some other
+    // changes around here.
+    /*
+    I'm not sure what you mean by safe but this shit is certainly crashing somewhere. That's what I'm trying to figure out now. I just want something semi-reliable right now.
+    */
+    
+    if scramble eq true then
+        vprint Clifford, 4: "trying to fill in gaps in the man_to_quo array";
+        goodkeys := [x: x in Keys(man_to_quo)|#Eltseq(man_to_quo[x]) le 100];
+        for i in [-Ngens(MSquo)..Ngens(MSquo)] do
+          if MSquo.i notin goodkeys then
+            if MSquo.(-i) in goodkeys then
+              man_to_quo[MSquo.i] := man_to_quo[(MSquo.(-i))]^-1;
+            elif exists(xy){[x,y]: x,y in goodkeys|x*y eq MSquo.i} then
+              man_to_quo[MSquo.i] := &*[man_to_quo[t]: t in xy];
+            elif exists(xyz){[x,y,z]: x,y,z in goodkeys|x*y*z eq MSquo.i} then
+              man_to_quo[MSquo.i] := &*[man_to_quo[t]: t in xyz];
+            end if;
+            // of course we could keep trying with a longer list, but we can't
+            // pretend that this is a homomorphism.
+          end if;
+        end for;
+        /* here is a more general way, just expressing everything in terms
+        of known things and pretending it's a homomorphism (this is a valid
+        way to produce a lift)
+        unfortunately it works very badly when there is torsion of large order*/
+        /*repeat
+          mybas := Setseq(RandomSubset(Keys(man_to_quo),Ngens(MSquo)));
+        until sub<MSquo|mybas> eq MSquo;
+        ag := AbelianGroup([Order(i): i in mybas]);
+        myhom := hom<ag->MSquo|mybas>;
+        for i in [-Ngens(MSquo)..Ngens(MSquo)] do
+          if MSquo.i notin Keys(man_to_quo) then
+            ib := (MSquo.i)@@myhom;
+            imi := &*[man_to_quo[mybas[j]]^Eltseq(ib)[j]: j in [1..#mybas]];
+            man_to_quo[MSquo.i] := imi;
+          end if;
+        end for;
+       */
+        
+        error if exists{c: c in [-Ngens(MSquo)..Ngens(MSquo)]|MSquo.c notin Keys(man_to_quo) and Order(MSquo.c) eq 0}, "failed to find the images of some generators of infinite order";
+    end if;
+
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    abs_to_man:=func<x|q_map(abs_to_free(x))>;
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    function man_to_abs(v)
+    //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        my_abs_symb:=<>;
+        //pull back v to MSfree
+        //then take eltseq
+        //w:=(v @@ q_map);
+        //c:=Eltseq(w);
+        c:=Eltseq(v);
+        for i in [1..#Generators(MSquo)] do //#Generators(MSfree)
+        //for i in [1..#Generators(MSfree)] do
+            Mi:=fp_element_to_matrix(PSL2O,man_to_quo[MSquo.i]); //replace man_to_quo with free_to_quo
+            //Mi:=fp_element_to_matrix(PSL2O,free_to_quo[MSfree.i]);
+            zero_c:=zero(cusp_set);
+            infty_c:=infinity(cusp_set);
+            
+            //---printing---
+            vprint Clifford,5: "about to act on zero_c=%o by Mi=%o... \n",zero_c,Mi;
+            
+            ai:=Mi*zero_c;
+            bi:=Mi*infty_c;
+            
+            //---printing---
+            vprint Clifford,5: "success... \n";
+            
+            ci:=c[i];
+            basici:=<<ai,bi>,ci>;
+            my_abs_symb:=my_abs_symb cat <basici>;
+        end for;
+        return my_abs_symb;
+    end function;
+    
+    //#####################
+    function random_manin_symbol();
+    //#####################
+        free_element:=&+[random_integer()*v : v in Generators(MSfree)];
+        return q_map(free_element);
+    end function;
+    
+    MS`finite_index_subgroup_fp:=Gammaquo;
+    MS`psl2o:=PSL2O;
+    MS`right_transversals:=R;
+    MS`right_transversal_map:=get_rep;
+    MS`right_transversal_matrices:=rep_mats;
+    MS`quo_to_free:=quo_to_free;
+    MS`free_to_quo:=free_to_quo;
+    MS`quo_to_manin:=quo_to_man;
+    MS`manin_to_quo:=man_to_quo;
+    MS`free_module:=MSfree;
+    MS`manin:=MSquo;
+    MS`clifford_algebra:=cl;
+    MS`magma_algebra:=cl_mag;
+    MS`clifford_order:=O;
+    MS`fp_group_to_free_module:=quo_to_free;
+    MS`free_module_to_fp_group:=free_to_quo;
+    MS`manin_module:=MSquo;
+    MS`free_to_manin_map:=q_map;
+    //MS`quo_to_man_func:=quo_to_man;
+    //MS`man_to_quo_func:=man_to_quo;
+    MS`man_to_abs_func:=man_to_abs;
+    MS`abs_to_man_func:=abs_to_man;
+    MS`abs_to_free_func:=abs_to_free;
+    MS`free_to_abs_func:=free_to_abs;
+    MS`abs_to_free_cusp_func:=abs_to_free_cusp;
+    MS`free_to_abs_cusp_func:=free_to_abs_cusp;
+    MS`random_manin_symbol:=random_manin_symbol;
+    MS`cusps:=cusp_set;
+    MS`relations:=relations;
+    // I don't understand--why is this not the same as subgroup_mats,
+    // at least up to sign?  It's slow so I don't want to compute it again.
+    // MS`subgroup_matrix_generators:= [fp_element_to_matrix(PSL2O,PSL2Oquo!g) : g in Generators(Gammaquo)];
+    MS`subgroup_matrix_generators := subgroup_mats;
+    return MS;
+    
+end intrinsic;
+
+//#############################
+intrinsic clifford_algebra(MS:ModSymCliff)->CliffAlg
+//#############################
+{}
+    return clifford_algebra(clifford_bianchi_group(MS));
+end intrinsic;
+
+//#############################
+intrinsic get_clifford_algebra(MS:ModSymCliff)->CliffAlg
+//#############################
+{}
+    return clifford_algebra(MS);
+end intrinsic;
+
+//#############################
+intrinsic magma_algebra(MS::ModSymCliff) -> AlgClff
+//#############################
+{}
+  return get_magma_algebra(clifford_algebra(MS));
+end intrinsic;
+
+//#############################
+intrinsic get_magma_algebra(MS::ModSymCliff) -> AlgClff
+//#############################
+{}
+  return magma_algebra(MS);
+end intrinsic;
+
+//############################
+intrinsic clifford_bianchi_group(MS:ModSymCliff)->GrpPSL2Cliff
+//############################
+{}
+    return MS`psl2o;
+end intrinsic;
+
+//############################
+intrinsic psl2(MS:ModSymCliff)->GrpPSL2Cliff
+//############################
+{}
+    return clifford_bianchi_group(MS);
+end intrinsic;
+
+//############################
+intrinsic get_psl2(MS:ModSymCliff)->GrpPSL2Cliff
+//############################
+{}
+    return clifford_bianchi_group(MS);
+end intrinsic;
+
+//############################
+intrinsic clifford_order(MS:ModSymCliff)->GrpPSL2Cliff
+//############################
+{}
+    return clifford_order(clifford_bianchi_group(MS));
+end intrinsic;
+
+//#############################
+intrinsic cusps(MS:ModSymCliff)->SetCspCliff
+//#############################
+{}
+    if not assigned MS`cusps then
+        MS`cusps:=cusps(clifford_algebra(MS));
+    end if;
+    
+    return MS`cusps;
+end intrinsic;
+
+//#############################
+intrinsic get_cusps(MS:ModSymCliff)->SetCspCliff
+//#############################
+{}
+    return cusps(MS);
+end intrinsic;
+
+//#############################
+intrinsic get_defining_group_fp(MS:ModSymCliff)->GrpFP
+//#############################
+{}
+    return MS`finite_index_subgroup_fp;
+end intrinsic;
+
+
+//#############################
+intrinsic zero_mod_sym(MS::ModSymCliff) -> ModSymCliffElt
+//#############################
+{create an empty modular symbol}
+  return mod_sym(MS,<>);
+end intrinsic;
+
+//#############################
+intrinsic random_manin_symbol(MS::ModSymCliff) -> GrpAbElt
+//#############################
+{Create a random manin symbol}
+  return MS`random_manin_symbol();
+end intrinsic;
+
+//#############################
+intrinsic principal_symbol(MS::ModSymCliff,A::AlgMatElt) -> ModSymCliffElt
+//#############################
+{}
+    csp:=cusps(MS);
+    
+    //old convention
+    infty_c:=infinity(csp);
+    zero_c:=zero(csp);
+    k:=<A*zero_c,A*infty_c>;
+    val:=1;
+    basic:=<k,val>;
+    sym:=<basic>;
+    return mod_sym(MS,sym);
+end intrinsic;
+
+//#############################
+intrinsic basic_symbol(MS::ModSymCliff,pair::Tup) -> ModSymCliffElt
+//#############################
+{}
+    require #pair eq 2: "The tuple must have length two";
+    csp:=cusps(MS);
+    //old convention
+    k:=<csp!pair[1],csp!pair[2]>;
+    val:=1;
+    basic:=<k,val>;
+    sym:=<basic>;
+    return mod_sym(MS,sym);
+end intrinsic;
+
+//#############################
+intrinsic basic_symbol(MS::ModSymCliff,pair::SeqEnum) -> ModSymCliffElt
+//#############################
+{}
+    require #pair eq 2: "The sequence must have length two";
+    csp:=cusps(MS);
+    k:=<csp!pair[1],csp!pair[2]>;
+    val:=1;
+    basic:=<k,val>;
+    sym:=<basic>;
+    return mod_sym(MS,sym);
+end intrinsic;
+
+//#############################
+intrinsic mod_sym(MS::ModSymCliff,y::Tup) -> ModSymCliffElt
+//#############################
+{
+Create a modular symbol from a tuple.
+Entries should be of the form <[x0,x1],c> where c is a rational number and x0 and x1 are cusps which can either be clifford algebra elements infty.
+}
+    //---printing---
+    vprintf Clifford, 5: "Entering mod_sym for Tup...\n";
+
+    cusp_set:=MS`cusps;
+    
+    ms := New(ModSymCliffElt);
+    ms`parent:=MS;
+    ms`magma_algebra := get_magma_algebra(MS);
+    ms`assoc := AssociativeArray();
+    
+    for tup in y do
+        pair:=tup[1];
+        value:=tup[2];
+        
+        require #pair eq 2: "A valid tuple must have length two";
+        require pair[1] in cusp_set and pair[2] in cusp_set: "A valid tuple requires pairs to be elements of the set of cusps";
+        
+        a:=pair[1];
+        b:=pair[2];
+        
+        if a lt b then
+            if IsDefined(ms`assoc,[a,b]) then
+                ms`assoc[[a,b]] +:= value;
+            else
+                ms`assoc[[a,b]] := value;
+            end if;
+        elif b lt a then
+            if IsDefined(ms`assoc,[b,a]) then
+                ms`assoc[[b,a]] +:= -value;
+            else
+                ms`assoc[[b,a]] := -value;
+            end if;
+        else
+            //skip because the empty associative array should correspond to the zero manin symbol.
+        end if;
+    end for;
+    
+    return ms;
+end intrinsic;
+
+//intrinsic convert_from_manin_symbol
+
+
+//###########################
+intrinsic get_abstract_symbol(ms:ModSymCliffElt)->Tup
+//############################
+{}
+    return <<k,coeff(ms,k)>:k in Keys(ms`assoc)>;
+    
+end intrinsic;
+
+
+//###########################
+intrinsic get_crude_abstract_symbol(ms:ModSymCliffElt)->Tup
+//############################
+{}
+    return <<<get_magma_value(k[1]),get_magma_value(k[2])>,coeff(ms,k)>:k in Keys(ms`assoc)>;
+    
+end intrinsic;
+
+//###########################
+intrinsic manin_symbol(ms:ModSymCliffElt)->GrpAbElt
+//############################
+{}
+    MS:=Parent(ms);
+    
+    return MS`abs_to_man_func(get_crude_abstract_symbol(ms));
+
+end intrinsic;
+
+
+//#############################
+intrinsic Print(MS::ModSymCliff)
+//#############################
+{}
+
+    printf "Modular symbols for the group %o inside %o \n",MS`finite_index_subgroup_fp,MS`psl2o;
+
+end intrinsic;
+
+//#############################
+intrinsic Print(m::ModSymCliffElt)
+//#############################
+{
+Print statement for modular symbol elements.
+We are following the magma template.
+//https://magma.maths.usyd.edu.au/magma/handbook/text/1668#18927
+
+}
+    //need these here for the function
+    dict:=m`assoc;
+    pairs:=[k : k in Keys(dict)];
+    
+    //%%%%%%%%%%%%%%%%%
+    function print_term(pair)
+    //%%%%%%%%%%%%%%%%%
+        if dict[pair] eq 0 then
+            return "";
+        else
+            return Sprintf( "%o*{%o,%o}",dict[pair],pair[1],pair[2]);
+        end if;
+    end function;
+    
+    //only have + signs for the first and last term.
+    n:=#pairs;
+    output_string:=print_term(pairs[1]);
+    for i in [2..n] do
+        output_string:=output_string cat " + " cat print_term(pairs[i]);
+    end for;
+    printf output_string;
+end intrinsic;
+
+//#############################
+intrinsic Parent(ms::ModSymCliffElt) -> ModSymCliff
+//#############################
+{}
+    return ms`parent;
+
+end intrinsic;
+
+
+//#############################
+intrinsic cusps(ms::ModSymCliffElt) -> SetCspCliff
+//#############################
+{}
+    return cusps(Parent(ms));
+
+end intrinsic;
+
+//#############################
+intrinsic coeff(m::ModSymCliffElt, v::SeqEnum) -> RngElt
+//#############################
+{coefficient of a pair}
+    isd,c := IsDefined(m`assoc,v);
+    if isd then
+        return c;
+    else
+        return 0;
+    end if;
+end intrinsic;
+
+//#############################
+intrinsic '+'(m::ModSymCliffElt, n::ModSymCliffElt) -> ModSymCliffElt
+//#############################
+{sum of modular symbols}
+    //this needs to be fixed.
+    //error if Parent(m) ne Parent(n) "must be the same Clifford algebra";
+    mn := <<k,coeff(m,k)+coeff(n,k)>: k in Keys(m`assoc) join Keys(n`assoc)>;
+    smn := mod_sym(Parent(m),mn);
+    return smn;
+end intrinsic;
+
+//#############################
+intrinsic '-'(m::ModSymCliffElt, n::ModSymCliffElt) -> ModSymCliffElt
+//#############################
+{difference of modular symbols}
+  //error if m`alg ne n`alg, "must be the same Clifford algebra";
+  mn := <<k,coeff(m,k)-coeff(n,k)>: k in Keys(m`assoc) join Keys(n`assoc)>;
+  smn := mod_sym(Parent(m),mn);
+  return smn;
+end intrinsic;
+
+//#############################
+intrinsic '*'(m::RngElt, n::ModSymCliffElt) -> ModSymCliffElt
+//#############################
+{multiple of modular symbol}
+  mn := <<k,m*coeff(n,k)>: k in Keys(n`assoc)>;
+  smn := mod_sym(Parent(n),mn);
+  return smn;
+end intrinsic;
+
+//#############################
+intrinsic '*'(g::AlgMatElt, ms::ModSymCliffElt) -> ModSymCliffElt
+//#############################
+{multiple of modular symbol}
+    new_abs := <<<g*k[1],g*k[2]>,coeff(ms,k)> : k in Keys(ms`assoc)>;
+    return mod_sym(Parent(ms),new_abs);
+end intrinsic;
+
+//#############################
+intrinsic '-'(n::ModSymCliffElt) -> ModSymCliff
+//#############################
+{negative of modular symbol}
+  // could just do -1*n
+  mn := <<k,-coeff(n,k)>: k in Keys(n`assoc)>;
+  smn := mod_sym(Parent(n),mn);
+  return smn;
+end intrinsic;
+
+//#############################
+intrinsic is_zero(n::ModSymCliffElt) -> BoolElt
+//#############################
+{test whether symbol is 0}
+  return forall{k: k in Keys(n`assoc)|n[k] eq 0};
+end intrinsic;
+
+//#############################
+intrinsic 'eq'(m::ModSymCliffElt, n::ModSymCliffElt) -> BoolElt
+//#############################
+{test whether symbols are equal}
+  //error if m`alg ne n`alg, "must be the same Clifford algebra";
+  return forall{k: k in Keys(m) join Keys(n)|coeff(m,k) eq coeff(n,k)};
+end intrinsic;
+
+//#############################
+intrinsic Eltseq(m::ModSymCliffElt) -> SeqEnum
+//#############################
+{list of terms in a modular symbol}
+  return [<a,m`assoc[a]>: a in Keys(m`assoc)];
+end intrinsic;
+
+//#############################
+intrinsic Printf(MS::ModSymCliff)
+//#############################
+{print}
+  printf "Modular symbols for the group %o inside %o.",MS`finite_index_subgroup_fp,MS`psl2o;
+end intrinsic;
+
+//##########################
+intrinsic IsCoercible(MS::ModSymCliff, x::.)->ModSymElt
+//##########################
+{}
+    if ISA(Type(x),GrpAbElt) then
+        V:=MS`manin;
+        return manin_to_modular_symbol(MS,V!x);
+    else
+        error "not implemented";
+    end if;
+
+end intrinsic;
+
+
+//##########################
+intrinsic manin_to_modular_symbol(MS::ModSymCliff,v::GrpAbElt)->ModSymCliffElt
+//##########################
+{}
+    V:=MS`manin;
+    v_manin:=V!v;
+    v_abs:=MS`man_to_abs_func(v_manin);
+    
+    //---printing---
+    vprintf Clifford, 5: "returned an abstract symbol from MS`man_to_abs_func of type %o...\n",Type(v_abs);
+    
+    return mod_sym(MS,v_abs);
+
+end intrinsic;
+
+
+intrinsic is_integral(O::CliffOrd,g::AlgMatElt)->BoolElt
+{Determine if a matric has entries in an order}
+    return forall{ x : x in Eltseq(g) | x in O};
+end intrinsic;
+
+
+
+//##############################
+intrinsic hecke_double_cosets(PSL2O::GrpPSL2Cliff,PSigma::GrpFP,alpha::AlgMatElt)->SeqEnum
+//##############################
+{
+Let Sigma be a finite index subgroup of PSL2(O).
+
+We can write  Sigma alpha Sigma a union of cosets for the left action by Sigma on Sigma alpha Sigma so that Sigma alpha Sigma = bigcup Sigma alphai. This algorithm returns the collection of alphai.
+
+We use that there is a bijection between the cosets for the left action of Sigma^alpha cap Sigma on Sigma  and cosets for the left action of Sigma on Sigma alpha Sigma. The map is given by Sigma^alpha cap Sigma)gamma mapsto Sigma alpha gamma. So if we are given a left coset representative for the previous then we have gamma mapping to alpha gamma.
+
+Hence to compute the double cosets it suffices to compute Sigma^alpha cap Sigma inside of Sigma.
+}
+    //M2O:=PSL2O`matrix_algebra;//needs to be written
+    PSL2O_quo:=fp_group(PSL2O);
+
+    if not assigned PSL2O`hecke_double_cosets then
+      PSL2O`hecke_double_cosets:=AssociativeArray();
+    end if;
+    
+    if not PSigma in Keys(PSL2O`hecke_double_cosets) then
+        PSL2O`hecke_double_cosets[PSigma]:=AssociativeArray();
+    end if;
+    
+    if not alpha in Keys(PSL2O`hecke_double_cosets[PSigma]) then
+        /*
+        We need to compute Sigma cap Sigma^{alpha} to do this we compute Sigma^{alpha} cap SL2(O) and then intersect it with Sigma.
+        We actually do a PSL2 version of this.
+        
+        The hard part is computing Sigma^{alpha} cap SL2(O).
+            --The set of g such that g^{alpha} is in SL2(O) is Gamma0(alpha).
+            --This means unconjugating Sigma^{alpha} cap SL2(O) will land in Gamma0(alpha) and also land in Sigma.
+            --This means we can compute Gamma0(alpha) cap Sigma then conjugate it.
+        There is an additional set here where we take the good cosets of the right action of Gamma0(alpha) cap Sigma inside of Sigma and additionally adjoin those, but I think this step is superfluous.
+        */
+        //PSigma0_conj_sub, incl1, conj_gens_mat := conjugate_intersection(PSL2O,PSigma,alpha);
+        PSigma0_conj_sub:= conjugate_intersection(PSL2O,PSigma,alpha);
+        
+        //---printing---
+        vprintf Clifford,3: "Computing the intersection of PSigma and its conjugate...\n";
+
+        PSigma_cap_PSigma_conj:=PSigma meet PSigma0_conj_sub; //coset table is not closed
+        hecke_cosets_single_quo:=[ PSL2O_quo ! x: x in RightTransversal(PSigma,PSigma_cap_PSigma_conj)];
+        hecke_cosets_single_mat:=[fp_element_to_matrix(PSL2O,x) : x in hecke_cosets_single_quo];
+        hecke_cosets_double_mat:=[alpha*x : x in hecke_cosets_single_mat]; //using the single to double coset isomorphism
+        
+
+        PSL2O`hecke_double_cosets[PSigma][alpha]:=hecke_cosets_double_mat;
+        
+    end if;
+    
+    return PSL2O`hecke_double_cosets[PSigma][alpha];
+        
+end intrinsic;
+
+
+/*
+
+//OLD CODE.
+    if not assigned PSL2O`hecke_double_cosets then
+      PSL2O`hecke_double_cosets:=AssociativeArray();
+      
+    end if;
+    
+    if not PSigma in Keys(PSL2O`hecke_double_cosets) then
+        PSL2O`hecke_double_cosets[PSigma]:=AssociativeArray();
+    end if;
+    
+    if not alpha in Keys(PSL2O`hecke_double_cosets[PSigma]) then
+        /////
+        We need to compute Sigma cap Sigma^{alpha} to do this we compute Sigma^{alpha} cap SL2(O) and then intersect it with Sigma.
+        We actually do a PSL2 version of this.
+        
+        The hard part is computing Sigma^{alpha} cap SL2(O).
+            --The set of g such that g^{alpha} is in SL2(O) is Gamma0(alpha).
+            --This means unconjugating Sigma^{alpha} cap SL2(O) will land in Gamma0(alpha) and also land in Sigma.
+            --This means we can compute Gamma0(alpha) cap Sigma then conjugate it.
+        
+        There is an additional set here where we take the good cosets of the right action of Gamma0(alpha) cap Sigma inside of Sigma and additionally adjoin those, but I think this step is superfluous.
+        /////
+    
+        //M2O:=PSL2O`matrix_algebra; //this was only does matrices over the rational clifford algebra
+        O:=clifford_order(PSL2O);
+        M2O:=MatrixAlgebra(2,magma_algebra(O));
+        PSL2O_quo:=fp_group(PSL2O);
+        
+        //---printing---
+        vprintf Clifford, 4: "Calling Gamma0(alpha), this takes three minutes when not called before on the hurwitz order... \n";
+        
+        Gamma0_sub,map:=Gamma0_fp(PSL2O,alpha);
+        quot_map:=PSL2O`sl2_to_psl2_fp;
+        PGamma0_sub:=quot_map(map(Gamma0_sub));//this procedure should be a call, there is an issue here.
+        
+        //The intersection
+        PSigma0_sub:=PSigma meet PGamma0_sub;
+        "Index of PSigma0_sub:", Index(PSL2O_quo,PSigma0_sub);
+        PSigma0_gens_mat:=[fp_element_to_matrix(PSL2O,g):g in Generators(PSigma0_sub)];
+        PSigma0_conj_gens_mat:=[alpha^(-1)*g*alpha: g in PSigma0_gens_mat];
+        
+        assert forall {c: c in PSigma0_conj_gens_mat| c in M2O };
+        PSigma0_conj_gens:=[ matrix_to_fp_element(PSL2O,g) : g in PSigma0_conj_gens_mat];
+        PSigma0_conj_sub,incl1:=sub<PSL2O_quo|PSigma0_conj_gens>;
+        "Index of PSigma0_conj_sub:", Index(PSL2O_quo,PSigma0_conj_sub);
+        //---printing---
+        vprintf Clifford, 3: "Computing cosets of conjugate of PSigma cap PGamma0(alpha) inside PSigma... \n";
+        
+        //we now do a potentially superfluous step; I think this step was not superfluous. It is for making sure the coset table was closed which is needed for computing intersections.
+        
+        /////
+        cosets:=RightTransversal(PSigma,PSigma0_conj_sub);
+        cosets:=[PSL2O_quo ! x :x in cosets];
+        cosets_mat:=[fp_element_to_matrix(PSL2O,x):x in cosets];
+        
+        good_cosets_mat:=[];
+        for M in cosets_mat do
+            Mconj:=alpha^(-1) * M * alpha;
+            if Mconj in M2O then
+                Append(~good_cosets_mat,Mconj);
+            end if;
+        end for;
+        good_cosets_quo:=[matrix_to_fp_element(c) : c in good_cosets_mat];
+        
+        //This is PSigma^{\alpha} cap PSL2O. I think good_cosets_quo, maybe this join should be cat
+        PSigma_conj_int:=sub<PSL2O_quo|PSigma0_conj_gens, good_cosets_quo>;
+        //////
+        //This step computes PSigma cap PSigma^{alpha}.
+        
+        //---printing---
+        vprintf Clifford,3: "Computing the intersection of PSigma and its conjugate...\n";
+        
+        //PSigma_cap_PSigma_conj:=PSigma meet PSigma_conj_int;
+
+        // these are now superfluous
+        // "Index of PSigma:", Index(PSL2O_quo,PSigma);
+        // "Index of PSigma0_conj_sub:", Index(PSL2O_quo,PSigma0_conj_sub);
+
+        PSigma_cap_PSigma_conj:=PSigma meet PSigma0_conj_sub; //coset table is not closed
+        hecke_cosets_single_quo:=[ PSL2O_quo ! x: x in RightTransversal(PSigma,PSigma_cap_PSigma_conj)];
+        hecke_cosets_single_mat:=[fp_element_to_matrix(PSL2O,x) : x in hecke_cosets_single_quo];
+        hecke_cosets_double_mat:=[alpha*x : x in hecke_cosets_single_mat]; //using the single to double coset isomorphism
+        
+
+        PSL2O`hecke_double_cosets[PSigma][alpha]:=hecke_cosets_double_mat;
+        
+    end if;
+    
+    return PSL2O`hecke_double_cosets[PSigma][alpha];
+        
+end intrinsic;
+*/
+
+//##########################
+intrinsic hecke_double_cosets(MS::ModSymCliff,alpha::AlgMatElt)->SeqEnum
+//##########################
+{}
+    PSigma:=get_defining_group_fp(MS);
+    PSL2O:=get_psl2(MS);
+    return hecke_double_cosets(PSL2O,PSigma,alpha);
+
+end intrinsic;
+
+//##########################
+intrinsic get_finite_index_fp(MS::ModSymCliff)->GrpFp
+//##########################
+{}
+    return MS`finite_index_subgroup_fp;
+end intrinsic;
+
+//##########################
+intrinsic hecke_action(alpha::AlgMatElt,ms::ModSymCliffElt)->ModSymCliffElt
+//##########################
+{}
+    MS:=Parent(ms);
+    hecke_mats:=hecke_double_cosets(MS,alpha);
+    mod_syms:=[g*ms: g in hecke_mats];
+    return &+mod_syms;
+  
+end intrinsic;
+
+
+//##########################
+intrinsic generators(MS::ModSymCliff)->SeqEnum
+//##########################
+{}
+    V:=manin_symbols(MS);
+    //cache these
+    return [MS.i : i in [1..Ngens(MS)]];
+end intrinsic;
+
+//##########################
+intrinsic '.'(MS::ModSymCliff,i::RngIntElt)->ModSymCliffElt
+//##########################
+{}
+   v:=manin_symbols(MS).i;
+   return manin_to_modular_symbol(MS,v);
+end intrinsic;
+
+//##########################
+intrinsic manin_symbols(MS::ModSymCliff)->GrpAb
+//##########################
+{Return the Manin symbols of the set of modular symbols as a finitely generated abelian group.}
+    return MS`manin;
+end intrinsic;
+
+
+//##########################
+intrinsic 'eq'(m1::ModSymCliffElt,m2::ModSymCliffElt)->BoolElt
+//##########################
+{}
+    man1:=manin_symbol(m1);
+    man2:=manin_symbol(m2);
+    //require: Parent(m1) eq Parent(m2));
+    return man1 eq man2;
+end intrinsic;
+
+//##########################
+intrinsic Ngens(MS::ModSymCliff)->RngIntElt
+//##########################
+{}
+   return Ngens(MS`manin);
+end intrinsic;
+
+//##########################
+intrinsic rank(MS::ModSymCliff)->RngIntElt
+//##########################
+{}
+   return Rank(MS`manin);
+end intrinsic;
+
+//##########################
+intrinsic hecke_matrix(MS::ModSymCliff,alpha::AlgMatElt)->AlgMatElt
+//##########################
+{}
+    if not assigned MS`hecke_matrices then
+        MS`hecke_matrices:=AssociativeArray();
+    end if;
+    
+    if not alpha in Keys(MS`hecke_matrices) then
+        sequence:=[];
+        n:=Ngens(MS);
+        for i in [1..n] do
+            vprintf Clifford, 4: "Hecke matrix alpha=%o, column=%o...\n",alpha,i;
+            man_i:=manin_symbols(MS).i;
+            ms_i:=manin_to_modular_symbol(MS,man_i);
+            Tman_i:=manin_symbol(hecke_action(alpha,ms_i));
+            sequence:=sequence cat [ Eltseq(Tman_i) ];
+        end for;
+        
+        Talpha:=Matrix(n,n,sequence);
+        MS`hecke_matrices[alpha]:=Talpha;
+    end if;
+    
+    return MS`hecke_matrices[alpha];
+    
+end intrinsic;
+
+
+//#########################
+intrinsic subgroup_matrix_generators(MS)->SeqEnum
+//#########################
+{}
+    if not assigned MS`subgroup_matrix_generators then
+        PSigma:=subgroup_fp(MS);
+        PSL2O:=MS`psl2;
+        PSL2O_quo:=fp_group(PSL2O);
+        MS`subgroup_matrix_generators:=[fp_element_to_matrix(PSL2O,PSL2O_quo!g) : g in Generators(PSigma)];
+    end if;
+    
+    return MS`subgroup_matrix_generators;
+end intrinsic;
+
+//############################
+intrinsic subgroup_fp(MS::ModSymCliff)->GrpFP
+//############################
+{}
+    return MS`finite_index_subgroup_fp;
+end intrinsic;
+
+
+//############################
+intrinsic random_basic_symbol_crude(cl::CliffAlg : bound:=20)->Tup
+//###########################
+{}
+    //put optional parameters in
+    return <random_clifford_vector(cl),random_clifford_vector(cl)>;
+end intrinsic;
+
+//#########################
+intrinsic random_basic_symbol(MS::ModSymCliff)->ModSymCliffElt
+//#########################
+{}
+    cl:=get_clifford_algebra(MS);
+    return basic_symbol(MS,random_basic_symbol_crude(cl));
+end intrinsic;
+
+
+
+//#########################
+intrinsic random_relation_basic(MS::ModSymCliff)->ModSymCliffElt
+//#########################
+{}
+    mats:=subgroup_matrix_generators(MS);
+    g:=random_product(mats);
+    symb:=random_basic_symbol(MS);
+    return symb-g*symb;
+end intrinsic;
+
+//#########################
+intrinsic manin_symbols_tf(MS::ModSymCliff)->GrpAb,Map
+//#########################
+{}
+    if not assigned MS`manin_module_tf then
+        MS`manin_module_tf,MS`manin_module_tf_map:=FreeAbelianQuotient(manin_symbols(MS));
+    end if;
+        return MS`manin_module_tf,MS`manin_module_tf_map;
+end intrinsic;
+
+//#########################
+intrinsic hecke_matrix_tf(MS::ModSymCliff,alpha::AlgMatElt)->AlgMatElt
+//########################
+{}
+
+    if not assigned MS`hecke_matrices_tf then
+        MS`hecke_matrices_tf:=AssociativeArray();
+    end if;
+    
+    if not alpha in Keys(MS`hecke_matrices_tf) then
+        Talpha:=hecke_matrix(MS,alpha);
+        rows:=[];
+        TF,tf_map:=manin_symbols_tf(MS);
+        manin:=manin_symbols(MS);
+        for i in [1..Ngens(TF)] do
+            v:=TF.i;
+            prerow:=tf_map(manin!Eltseq(Vector(Eltseq(v@@tf_map))*Talpha));
+            rows:=rows cat [Eltseq(prerow)];
+        end for;
+        Talpha_tf:=Matrix(rows);
+        MS`hecke_matrices_tf[alpha]:=Talpha_tf;
+    end if;
+    
+    return MS`hecke_matrices_tf[alpha];
+    
+end intrinsic;
+
+//#########################
+intrinsic hecke_matrices(MS::ModSymCliff)->Assoc
+//########################
+{}
+    if not assigned MS`hecke_matrices then
+        MS`hecke_matrices:=AssociativeArray();
+    end if;
+    
+    return MS`hecke_matrices;
+    
+end intrinsic;
+
+//#########################
+intrinsic hecke_matrices_tf(MS::ModSymCliff)->SeqEnum
+//########################
+{}
+    if not assigned MS`hecke_matrices_tf then
+        MS`hecke_matrices_tf:=AssociativeArray();
+    end if;
+    
+    Mn:=MatrixAlgebra(Q,Ngens(manin_symbols_tf(MS)));
+    MS`matrix_algebra:=Mn;
+    
+    return [Mn!MS`hecke_matrices_tf[k] : k in Keys(MS`hecke_matrices_tf)];
+    
+end intrinsic;
+
+//#########################
+intrinsic hecke_algebra_tf(MS::ModSymCliff)->AlgMat
+//########################
+{}
+    Mn:=MS`matrix_algebra;
+    hecke_mats_tf:=hecke_matrices_tf(MS);
+    hecke_alg_tf:=sub<Mn|hecke_mats_tf>;
+    MS`hecke_algebra_tf:=hecke_alg_tf;
+    
+    return MS`hecke_algebra_tf;
+    
+end intrinsic;
+
+//#########################
+intrinsic hecke_eigenspaces(MS::ModSymCliff : raw:=false)->SeqEnum
+//########################
+{}
+    manin_tf:=manin_symbols_tf(MS);
+    hecke_algebra_tf:=hecke_algebra_tf(MS);
+    eigenspaces:=CommonEigenspaces(hecke_algebra_tf);
+    
+    if raw then
+        return eigenspaces;
+    end if;
+
+    spaces:=[];
+    for eigenspace in eigenspaces do
+        gens:=[g : g in Generators(eigenspace)];
+        Append(~spaces,sub<manin_tf|[&+[Z!(Eltseq(gen)[i])*manin_tf.i: i in [1..Ngens(manin_tf)]] : gen in gens]>);
+    end for;
+    
+    MS`eigenspaces:=spaces;
+    
+    return MS`eigenspaces;
+    
+end intrinsic;
+
+
+////////////////////////////////////////
+////////////////////////////////////////
+// HECKE OPERATORS ON ABELIANIZATIONS
+////////////////////////////////////////
+////////////////////////////////////////
+
+////////////////////
+intrinsic conjugate_intersection(SL2O::GrpPSL2Cliff,PSigma::GrpFP,alpha::AlgMatElt)->GrpFP
+////////////////////
+{Given PSigma a subgroup of PSL2(O) compute alpha^-1*PSigma*alpha meet PSL2(O) symbolically.}
+    psl2_quo:=fp_group(SL2O);
+    gamma0,gamma0to:=Gamma0_fp(SL2O,alpha);
+    quot_map:=SL2O`sl2_to_psl2_fp;
+    gamma0a:=gamma0to(gamma0);
+    Pgamma0a:=quot_map(gamma0a);
+    PSigma0a:=PSigma meet Pgamma0a;
+    gens0a:=[fp_element_to_matrix(SL2O,g):g in Generators(PSigma0a)];
+    gens0a_conj:=[alpha^(-1)*g*alpha: g in gens0a];
+    gens0a_conj_fp:=[ matrix_to_fp_element(SL2O,g) : g in gens0a_conj];
+    phi:=hom<PSigma0a->psl2_quo|gens0a_conj_fp>;
+    PSigma0a_conj:=Image(phi);
+    return PSigma0a_conj meet PSigma;
+end intrinsic;
+
+/*
+If we need to lift this to SL2 we can do something like this.
+
+quot_map:=PSL2O`sl2_to_psl2_fp;
+PSigma:=quot_map(Sigma);
+PSigma0_conj,incl,mat_gens:=conjugate_intersection(PSL2O,PSigma,alpha);
+mat_gens_inverted:=[g^-1 : g in mat_gens];
+rels:=[Eltseq(r[1]) cat Reverse([-x : x in Eltseq(r[2])]) : r in Relations(PSigma0_conj)];
+group_generators,relations:=lift_relations(mat_gens_inverted,rels);
+
+//I'm a little worried about the sign of the elements. I'm also a little worked that negative the identity is also included here.
+*/
+
+
+////////////////////
+intrinsic hecke_operator(SL2O::GrpPSL2Cliff,PSigma::GrpFP,alpha::AlgMatElt)->Map
+////////////////////
+{Compute the Hecke operator associated to the matrix alpha on the group PSigma which is an finitely presented subgroup of PSL2(O). This is done by first computing the PSigma meet PSigma^(alpha^-1) and then computing the transfer map from PSigma to this group, then computing the abelianization of the conjugation map from PSigma meet PSigma^(alpha^-1) to alpha^-1 PSigma alpha meet PSigma and then computing the image of that in the abelianization of PSigma. }
+    
+    
+    if not assigned SL2O`hecke_operators then
+        SL2O`hecke_operators:=AssociativeArray();
+    end if;
+    
+    if not PSigma in Keys(SL2O`hecke_operators) then
+        SL2O`hecke_operators[PSigma]:=AssociativeArray();
+    end if;
+    
+    if not alpha in Keys(SL2O`hecke_operators[PSigma]) then
+        function conj(g,alpha)
+            return matrix_to_fp_element(SL2O,alpha^-1*fp_element_to_matrix(SL2O,g)*alpha);
+        end function;
+        
+        PSigma_a_inv:=conjugate_intersection(SL2O,PSigma,alpha^-1);
+        PSigma_a:=conjugate_intersection(SL2O,PSigma,alpha);
+        conjugation_tuple:=[conj(g,alpha) : g in Generators(PSigma_a_inv)];
+
+        G1:=PSigma_a_inv;
+        G2:=PSigma_a;
+        
+        //compute presentations
+        R1,get_rep1:=Transversal(PSigma,G1);
+        R2,get_rep2:=Transversal(PSigma,G2);
+        test_G1:=func<x|get_rep1(x) eq Id(PSigma)>;
+        test_G2:=func<x|get_rep2(x) eq Id(PSigma)>;
+        pms1,tv1:=coset_table(PSigma,test_G1);
+        pres1,pres_to1:=presentation(PSigma,pms1,tv1,test_G1);
+        H1:=pres_to1(pres1);
+        assert H1 subset PSigma;
+        pms2,tv2:=coset_table(PSigma,test_G2);
+        pres2,pres_to2:=presentation(PSigma,pms2,tv2,test_G2);
+        H2:=pres_to2(pres2);
+        assert H2 subset PSigma;
+        H1_simple,H1_simple_to := Simplify(H1);
+        H2_simple,H2_simple_to :=Simplify(H2);
+        gens1:=AbelianGeneratorLifts(H1_simple); //this is defined in package-magma-fixes, and seems to hang
+        H1_ab,ab1_to:=AbelianQuotient(H1_simple);
+        PSigma_ab,f2:=AbelianQuotient(PSigma);
+        pre_conj_gens := [conj(H1_simple_to(g),alpha) : g in gens1];
+        assert forall{x: x in pre_conj_gens|x in PSigma};
+        conj_ab_gens := [f2(i): i in pre_conj_gens];
+        // conj_ab_gens:=[f2(conj(H1_simple_to(g),alpha)) : g in gens1]; //I have never gotten this to run
+        L:=hom<H1_ab->PSigma_ab|conj_ab_gens>;
+        tr,A,hA,B,hB:=TransferMap(PSigma,H1);
+        transfer:=hom<PSigma_ab->H1_ab | [H1_ab!Eltseq(tr(A.i)) : i in [1..Ngens(A)]]>;
+        Talpha:=hom<PSigma_ab->PSigma_ab|[L(transfer(PSigma_ab.i)) : i in [1..Ngens(PSigma_ab)] ]>;
+        SL2O`hecke_operators[PSigma][alpha]:=Talpha;
+    end if;
+        return SL2O`hecke_operators[PSigma][alpha];
+end intrinsic;
+
+////////////////////
+intrinsic hecke_matrix(SL2O::GrpPSL2Cliff,PSigma::GrpFP,alpha::AlgMatElt)->SeqEnum,Map
+////////////////////
+{Compute the hecke matrix on the abelianization of PSigma associated to the matrix alpha.}
+    
+    T:=hecke_operator(SL2O,PSigma,alpha);
+    return [Eltseq(T(g)) : g in Generators(Domain(T))],T;
+end intrinsic;
+
+////////////////////
+intrinsic hecke_matrix_tf(SL2O::GrpPSL2Cliff,PSigma::GrpFP,alpha::AlgMatElt)->AlgMatElt
+////////////////////
+{Compute the hecke matrix on the torsion free part of the abelianization of PSigma associated to the matrix alpha.}
+    T:=hecke_operator(SL2O,PSigma,alpha);
+    return matrix_on_torsion_free(T);
+end intrinsic;
+
+
+intrinsic matrix_on_torsion_free(f::Map)->AlgMatElt
+{Given an endomorphism of abelian groups return the associated on the torsion free part of the abelian group.}
+    A:=Domain(f);
+    Atf:=TorsionFreeSubgroup(A);
+    Ators:=TorsionSubgroup(A);
+    Btf,to_Btf:=A/Ators;
+    M:=Matrix([Eltseq(Atf!(to_Btf(f(Atf.i)) @@ to_Btf)) : i in [1..Ngens(Atf)]]);
+    return M;
+end intrinsic;
+
+
+////////////////////
+intrinsic load_gamma0_data(SL2O::GrpPSL2Cliff)
+////////////////////
+{Loads the gamma0 matrices that are available from storage.}
+    O:=clifford_order(SL2O);
+    cl:=clifford_algebra(O);
+    beta:=Matrix(2,2,[cl|2,0,0,1]);
+    gamma0:=Gamma0_fp(SL2O,get_label(beta));
+end intrinsic;
+
+
+////////////////////
+intrinsic levels_by_det(SL2O::GrpPSL2Cliff)->Assoc
+////////////////////
+{Get all of the levels of Gamma0 matrices and organize them by determinant}
+    O:=clifford_order(SL2O);
+    cl:=clifford_algebra(O);
+    M2:=MatrixAlgebra(magma_algebra(cl),2);
+    alpha_by_det:=AssociativeArray();
+    alphas:=[alpha : alpha in Keys(SL2O`gamma0fp_dict)];
+    for alpha in alphas do
+        d:=pdet(alpha)[1];
+        if not d in Keys(alpha_by_det) then
+            alpha_by_det[d]:=[M2!alpha];
+        else
+            Append(~alpha_by_det[d],M2!alpha);
+        end if;
+    end for;
+    
+    return alpha_by_det;
+end intrinsic;
+
+////////////////////
+intrinsic levels(SL2O::GrpPSL2Cliff)->SeqEnum[RngIntElt]
+////////////////////
+{Return all of the level that are currently stored for this group. For levels of prime pseudodeterminant one can also compute Gamma0_fp for alpha^-1 if they have been loaded from storage. This is used in Hecke operators on abelian groups.
+}
+    alphas_by_det:=levels_by_det(SL2O);
+    all_alphas:=&cat[ [alpha : alpha in alphas_by_det[d]] : d in Keys(alphas_by_det) | d gt 1];
+    all_alphas:=Reverse([alpha : alpha in all_alphas]);
+    return all_alphas;
+end intrinsic;
+
+////////////////////
+intrinsic groups_by_rank(grps::SeqEnum[GrpFP])->Assoc,SeqEnum
+////////////////////
+{}
+    grps_by_rank:=AssociativeArray();
+    for G in grps do
+        aq_invs:=AQInvariants(G);
+        r:=Multiplicity(aq_invs,0);
+        if r in Keys(grps_by_rank) then
+            Append(~grps_by_rank[r],G);
+        else
+            grps_by_rank[r]:=[G];
+        end if;
+    end for;
+    
+    return grps_by_rank;
+end intrinsic;
+
+////////////////////
+intrinsic low_index_by_rank(SL2O::GrpPSL2Cliff,tup::Tup)->Assoc,SeqEnum
+////////////////////
+{Return an associative array whose keys are subgroups of a given rank.}
+    quot:=SL2O`sl2_to_psl2_fp;
+    psl2_quo:=fp_group(SL2O);
+    low_index_subs:=LowIndexSubgroups(psl2_quo,tup);
+    libr:=groups_by_rank(low_index_subs);
+    return libr,low_index_subs;
+end intrinsic;
+
+////////////////////
+intrinsic PGamma0_by_rank(SL2O::GrpPSL2Cliff)->Assoc,SeqEnum
+////////////////////
+{Return an associative array whose keys are ranks and whose output are a collection of alphas such that PGamma0_alpha has that rank.}
+    quot:=SL2O`sl2_to_psl2_fp;
+    all_alphas:=[alpha : alpha in Keys(SL2O`gamma0fp_dict)];
+    
+    gamma_by_rank:=AssociativeArray();
+    for alpha in all_alphas do
+        gamma:=Gamma0_fp(SL2O,alpha);
+        aq_invs:=AQInvariants(gamma);
+        rk:=Multiplicity(aq_invs,0);
+        vprintf Clifford, 1: "%o,", rk;
+        if rk in Keys(gamma_by_rank) then
+            Append(~gamma_by_rank[rk],alpha);
+        else
+            gamma_by_rank[rk]:=[alpha];
+        end if;
+    end for;
+    
+    return gamma_by_rank;
+end intrinsic;
+    
+
+/////////////////////////
+intrinsic PGamma0_fp(SL2O::GrpPSL2Cliff,seq::SeqEnum)->GrpFP
+/////////////////////////
+{Return the intersection of PGamma0(alpha) for alpha in seq.}
+//add caching
+    quot:=SL2O`sl2_to_psl2_fp;
+    gammas:=[];
+    for alpha in seq do
+        gamma0,f:=Gamma0_fp(SL2O,alpha);
+        Pgamma:=quot(f(gamma0));
+        Append(~gammas,Pgamma);
+    end for;
+    return &meet(gammas);
+end intrinsic;
+
+
+/////////////////////////
+intrinsic hecke_matrices_for_p(SL2O::GrpPSL2Cliff,PSigma::GrpFP,p::RngIntElt :sample:=0)->Assoc
+/////////////////////////
+{Return the hecke matrices of a given level p.}
+    lvl_by_det:=levels_by_det(SL2O);
+    Tp:=AssociativeArray();
+    if sample eq 0 then
+        sample:=#lvl_by_det[p];
+    end if;
+    
+    
+    for i in [1..sample] do
+        alphai:=lvl_by_det[p][i];
+        t0:=Time();
+        Tp[i]:=hecke_matrix_tf(SL2O,PSigma,alphai);
+        vprintf Clifford,1: " %o: %o,", RealField(2)!i/sample,Time(t0);
+    end for;
+    
+    return Tp;
+end intrinsic;
+
+/////////////////////////
+intrinsic hecke_matrices_for_p(MS::ModSymCliff,p::RngIntElt :sample:=0)->Assoc
+/////////////////////////
+{Return the hecke matrices of a given level p.}
+    SL2O:=clifford_bianchi_group(MS);
+    lvl_by_det:=levels_by_det(SL2O);
+    Tp:=AssociativeArray();
+    if sample eq 0 then
+        sample:=#lvl_by_det[p];
+    end if;
+    
+    
+    for i in [1..sample] do
+        alphai:=lvl_by_det[p][i];
+        t0:=Time();
+        Tp[i]:=hecke_matrix_tf(MS,alphai);
+        vprintf Clifford,1: " %o: %o,", RealField(2)!i/sample,Time(t0);
+    end for;
+    
+    return Tp;
+end intrinsic;
+
+/////////////////////////
+intrinsic hecke_matrix_dict(SL2O::GrpPSL2Cliff,PSigma::GrpFP,primes::SeqEnum[RngIntElt]:sample:=0)->Assoc
+/////////////////////////
+{Return the hecke matrices of a given level p.}
+    T:=AssociativeArray();
+    for p in primes do
+        t0:=Time();
+        T[p]:=hecke_matrices_for_p(SL2O,PSigma,p:sample:=sample);
+        vprintf Clifford,1: "%o:%o,%o", p,RealField(2)!Index(primes,p)/#primes,Time(t0);
+    end for;
+    return T;
+end intrinsic;
+
+/////////////////////////
+intrinsic hecke_matrix_dict(MS::ModSymCliff,primes::SeqEnum[RngIntElt]:sample:=0)->Assoc
+/////////////////////////
+{Return the hecke matrices of a given level p.}
+    T:=AssociativeArray();
+    for p in primes do
+        t0:=Time();
+        T[p]:=hecke_matrices_for_p(MS,p:sample:=sample);
+        vprintf Clifford,1: "%o:%o,%o", p,RealField(2)!Index(primes,p)/#primes,Time(t0);
+    end for;
+    return T;
+end intrinsic;

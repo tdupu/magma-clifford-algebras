@@ -73,6 +73,7 @@ intrinsic get_Gamma0_test(O::CliffOrd,alpha::AlgMatElt)-> UserProgram //user fun
 {}
     O_mag:=get_magma_order(O);
     M2O:=MatrixRing(O_mag,2);
+    
     //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     function in_Gamma0(elt3,elt3_inv)
     //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

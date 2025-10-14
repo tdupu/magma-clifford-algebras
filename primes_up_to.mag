@@ -1,0 +1,61 @@
+AttachSpec("hecke.spec");
+
+Z:=Integers();
+Q:=RationalField();
+
+cl := clifford_algebra(3,Q);
+ord := get_maximal_orders(cl)[1];
+sl2o:=clifford_bianchi_group(get_label(ord));
+ord:=clifford_order(sl2o);
+cl:=clifford_algebra(ord);
+
+function cg_up_to(ord, upper:lower:=1)
+    bb:=basis(ord);
+    lat:=get_cliff_lattice(ord);
+    M:=Matrix([Eltseq(x) : x in basis(ord)]);
+    lat:=Lattice(M);
+    shorts:=ShortVectors(lat,lower,upper);
+    shorts_cg:=[];
+    for short in shorts do
+        elt:=&+[Coordinates(short[1])[i]*bb[i] : i in [1..#bb]];
+        if in_clifford_group(cl!elt) then
+            Append(~shorts_cg,<elt,short[2]>);
+        end if;
+    end for;
+    return shorts_cg;
+end function;
+
+function cg_of_norm(ord,p)
+    return [x[1] : x  in cg_up_to(ord,p:lower:=p)];
+end function;
+
+function partition(B0,test)
+    partitions:=[];
+    B:=B0;
+    while #B ne 0 do
+        x:=B[1];
+        A:={@ y : y in B| test(x,y) @};
+        B:={@ y : y in B| not y in A @};
+        Append(~partitions,A);
+    end while;
+    return partitions;
+end function;
+
+function primes_of_size(ord,p)
+    primes:=cg_of_norm(ord,p);
+    test:=func<x,y|x*y^(-1) in ord>;
+    sets:=partition(primes,test);
+    return [x[1] : x in sets];
+end function;
+
+
+function primes_up_to(ord,n)
+    return &cat[primes_of_size(ord,p) : p in PrimesUpTo(n)];
+end function;
+
+p2 := [cl|[1,1,0,0]];
+p3 := [cl|[1,1,1,0],[1,1,-1,0],[1,1,0,1],[1,1,0,-1]];
+p5 := [cl|[2,i,j,k]: i,j,k in [-1..1]|#[x: x in [i,j,k]|x eq 0] eq 2];
+primes:=p2 cat p3 cat p5;
+
+#primes_up_to(ord,5) eq #primes;

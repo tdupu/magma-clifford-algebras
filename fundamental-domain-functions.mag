@@ -1,0 +1,488 @@
+/*
+EXAMPLE USAGE:
+Z:=Integers();
+Q:=Rationals();
+AttachSpec("hecke.spec");
+SetLMFDBRootFolder(".");
+load "fundamental-domain-functions.mag";
+cl<[I]> := clifford_algebra(Q,[-1,-2]);
+O:=maximal_orders(cl)[1];
+assert is_norm_euclidean(O);
+FD:=fundamental_domain_infty(O);
+side_pair_infty:=side_pairing_infty(O,FD);
+stab_infty,to_stab_infty,gens_infty:=stabilizer_infty(O);
+group_generators,relations,G, side_pair, torsion_elements, polyhedron1, polyhedron2, edge2, next_step:=sl2_data(O,FD,side_pair_infty,stab_infty,gens_infty);
+Gamma:=clifford_bianchi_group(O,group_generators,relations);
+Gamma;
+
+*/
+
+
+function sl2_data(O,FD,side_pair_infty,stab_infty,gens_infty: inv_stable:=true)
+    /*
+    OUTPUT:
+    --gens, ordered set of AlgMat elements that generate PSL2. This is the generators of the stabilizer of infinity with S(x)=-x^-1.
+    --relations, a sequence of sequences of integers that give relations for the group.
+    --FD_SL2, the sequence of HypPol comprising the polyhedral complex for the fundamental domain. It can be chopped in half where half of it can be inverted to make a "spike".
+    --G, a graph whose vertices represent FD_SL2 and whose edges represent codimension 2 facets of FD_SL2.
+    --side_pair, dictionary which takes in vertices and returns a tuple of a group element and the vertex. If F_v is the facet of a vertex and side_pair[v]:=<g,w> then g*F_w = F_v. The element g is the element such that g(D) cap D = F_v where D is the fundamental domain of PSL2(O).
+    --torsion_elements, a sequence of <v,e,g> where g acts on the (codim1,codim2) cell pair non-trivially. That is g*F_v=F_v and g*E_e=E_e.
+    --polyhedron0, a user program which takes a vertex and returns F_v a facet of FD_SL2 as a HypPol element.
+    --polyhedron1, a user program which takes an edge e and returns an edge E_w as a hype pol element.
+    --edge2, a user program which takes a vertex v and a hyp pol E such that E is contained in F_v as a codimension 1 cell and returns the edge e of G such that polyhedron1(e) is equal to E. This is used in stepping in the walk algorithm.
+    --next_step, a user program which takes <v0,e0> with e0 and edge containing v0 and outputs <g,<v1,e1>> which is a group element sending the pair <v1,e1> to <v0,e0>.
+    --side_pair_poly, the side pairing with keys being polyhedron
+    --FD_SL2, the fundamental domain for the PSL2(O)
+    */
+    
+    cl:=clifford_algebra(O);
+    
+    
+    assert is_norm_euclidean(O);
+    /*
+    For each key of the side pairing is an
+    facet of the polyhedral complex of the stabilizer of infinity.
+    Each such facets has a unique full-dimensional cell of the complex
+    which contains it as a facet.
+    owner_cell takes the facet and returns the cell.
+    The keys of the owner cell are also the keys of the side-pairing in
+    this case.
+    */
+
+    sides := [side: side in Keys(side_pair_infty)];
+    Sorted(~sides);
+    num_sides:=#sides;
+    
+    //commonly used polyhedra
+    H:=hyperbolic_space(cl);
+    bub:=flip(bubble(H));
+    bottom:=bub meet flip(bub);
+    
+    //the owner_cell dictionary for side_pairing_infty is bugged so I'm redoing it.
+    /*
+    For each key of the side pairing for stabilizer of infinity is a facet of the polyhedral complex of the stabilizer of infinity. Each such facets has a unique full-dimensional cell of the polyhedral complex for the stabilizer of infinity which contains it as a facet (think: pizza slice and crust). The associative array owner_cell takes the facet and returns the cell of the polyhedral complex. The keys of the owner cell are also the keys of the side-pairing in this case.
+    */
+    
+    new_owner:=AssociativeArray();
+    for side in sides do
+        dude:=[e : e in FD | side subset e];
+        assert #dude eq 1;
+        new_owner[side]:=dude[1];
+    end for;
+
+    num_curved:=#FD;
+    num_flat:=#sides;
+    num_codim1:=num_curved+num_flat;
+    G,V,E:=Graph<{ x: x in [1..num_codim1]}|{}>;
+    
+    //STEP: Enumerate facets.
+    
+    //In previous iterations there were problems obtaining the codimension 1 cells from the tables that we computed. We enumerate them from the beginning for error correction purposes. Also, the code for doing it with polyhedral classes is way slower than doing it "by hand", so we do it "by hand".
+    
+    //By convention the curved facets come first and then the vertical facets. They come in the order which they are presented in the fundamental domain.
+    
+    //Later we construct a graph, and the ordering of the vertices there corresponds to the ordering of the codimension 1 cells here.
+    
+    codim1:=[];
+    
+    //curved facets at the bottom
+    for i in [1..num_curved] do
+        Append(~codim1,polyhedron(H,FD[i]) meet bottom);
+    end for;
+
+    //flat/vertical facets at the sides
+    for i in [1..num_sides] do
+        e0:=sides[i];
+        flat:=polyhedron(H,e0) meet bub;
+        Append(~codim1,flat);
+    end for;
+    
+    //STEP: ADD THE FUNCTIONs WE NEED INVOLVING codim1
+    
+    //----------
+    function polyhedron1(v)
+    //----------
+    /*
+    Convert a vertex into a codim1 HypPol
+    */
+        i:=Index(v);
+        return codim1[i];
+    end function;
+
+    //----------
+    function polyhedron2(edge)
+    //----------
+    /*
+    Convert an edge to a codim2 HypPol
+    */
+        v1,v2:=Explode([ v : v in EndVertices(edge)]);
+        i1:=Index(v1);
+        i2:=Index(v2);
+        return codim1[i1] meet codim1[i2];
+    end function;
+    
+    //STEP: Populate the graph which determines which facets are adjacent to each other. Each vertex in the graph represents a facet and each edge represents a codimension 2 cell.
+        
+    //Relations are obtained by walking around codimension 2 cells. Since we are building on the presentations the stabilizer of infinity which has computed the walls and because the relations coming from the intersection of two curves cells is silly as they are dealing with inversion the only interesting relations come from where vertical walls intersect curved facets at the bottom.
+    
+    //commented code is for testing and increases the length of each block from a couple seconds to a minute for each.
+    
+    codim2_interesting:=[];
+    V:=VertexSet(G);
+
+    //CURVED intersect CURVED
+    //t0:=Time();
+    num_pol:=#FD;
+    pairs:=[[i,j]: i,j in [1..num_pol]| i lt j];
+    for pair in pairs do
+        i,j:=Explode(pair);
+        e0:=FD[i] meet FD[j];
+        if Dimension(e0) eq dimension(H)-2 then //this was changed from H-3
+            AddEdge(~G,V.i,V.j);
+        end if;
+        if not inv_stable then
+            codim2_interesting:=codim2_interesting cat [{i,j}];
+        end if;
+    end for;
+    //Time(t0);
+
+    //CURVED intersect FLAT, this can be long if one uncomments the testing.
+    //It takes about 100 seconds with the tests
+    //
+    //t0:=Time();
+    for i in [1..num_sides] do
+        e0:=sides[i];
+        f0:=new_owner[sides[i]];
+        a:=Index(FD,f0);
+        curved:=polyhedron(H,f0) meet bottom; //this wasn't being picked up in the side pairing at some point
+        assert curved eq codim1[a];
+        flat:=polyhedron(H,e0) meet bub;
+        b:=num_curved+i;
+        assert flat eq codim1[b];
+        //e:=curved meet flat;
+        //alternatively polyhedron(H,e0) meet bottom.
+        AddEdge(~G,V.a,V.b);
+        E:=EdgeSet(G);
+        codim2_interesting:=codim2_interesting cat [{a,b}];
+    end for;
+    //Time(t0);
+
+    //FLAT intersect FLAT
+    //t0:=Time();
+    pairs:=[[i,j]: i,j in [1..num_sides]| i lt j];
+    adjacent_vert:=[];
+    for pair in pairs do
+        i,j:=Explode(pair);
+        e0:=sides[i] meet sides[j];
+        if Dimension(e0) eq dimension(H)-3 then
+            AddEdge(~G,V.(num_curved+i),V.(num_curved+j));
+        end if;
+    end for;
+    //Time(t0);
+    
+    //STEP: We now compute the side pairing and the fundamental domain. We use keys which are vertices of a graph rather than HypPol, since accessing the information from the dictionary is much faster this way as it avoids testing equality of HypPol instances.
+    
+    //There is a trick here. The map inv on clifford algebras negates the zeroth component of a clifford vector. When clifford vector has norm one, this is how the map S(x) = -x^-1 acts on these clifford vectors. This allows us to do computations in the boundary plane that correspond to computations on the sphere.
+    
+    S:=Matrix(2,2,[cl|0,-1,1,0]);
+    id_mat:=Matrix(2,2,[cl|1,0,0,1]);
+    neg_mat:=Matrix(2,2,[cl|-1,0,0,-1]);
+
+    inv:=func<x|inversion_inv(cl,x)>;
+    inv_stable:=(Set(FD) eq Set({ inv(x) : x in FD}));
+    
+    side_pair:=AssociativeArray();
+    FD_SL2:=[];
+
+    //t0:=Time();
+
+    //CURVED TO CURVED AND CONSTRUCTION OF FUNDAMENTAL DOMAIN
+    //takes much longer with tests
+    if inv_stable then
+        for i in [1..#FD] do
+            //we get a piece of the big fundamental domain by suspending
+            //then intersecting with the region above the bubble
+            p:=FD[i];
+            pol:=polyhedron(H,p) meet bub;
+            Append(~FD_SL2, pol);
+            
+            // a facet of FD_SL2 corresponding to pol is
+            // where pol meets the sphere
+            // (there is another one potentially on the outside
+            // but we deal with that later)
+            curved:=pol meet bottom; //index i; //num_curved
+            
+            //the curved portion is mapped to the other side via S
+            q:=inv(p);
+            curved2:=polyhedron(H,q) meet bottom;
+            j:=Index(FD,q);
+            side_pair[V.i] := <S,V.j>;
+            assert curved eq S*curved2;
+            assert polyhedron1(V.i) eq curved;
+            assert polyhedron1(V.j) eq curved2;
+        end for;
+        
+        curved_facets:=[ s : s in Keys(side_pair)];
+        
+    elif not inv_stable then
+        cl:=clifford_algebra(O);
+        L:=vec(O:small:=true);
+        dim:=Rank(L);
+
+        inv:=func<x|inversion_inv(cl,x)>;
+
+        v_cell,stuff,VC_vecs:=VoronoiCell(L);
+        lattice_points:=[L!v : v in VC_vecs];
+        translators:=[O!clifford_vector(cl,t) : t in lattice_points cat [L!0]];
+        
+        v_cell_poly := Polyhedron([Eltseq(x): x in VoronoiCell(L)]);
+        v_cell_data:={<rotation_matrix(u)*inv(piece),rotation_matrix(u)> : u in units(O),piece in FD};
+
+
+        all_v_cells:={x[1]: x in v_cell_data};
+        assert join_polyhedra(all_v_cells) eq v_cell_poly;
+        assert Volume(v_cell_poly) eq &+[Volume(pol) : pol in all_v_cells];
+
+        //compute the side pairing. Note that the second entry of all_cells is a multiplication by a unit followed by a general translation.
+        all_cells:=[<translation_matrix(v)*x[1],translation_matrix(v)*x[2]>: v in translators, x in v_cell_data];
+        
+        translates:={ data[1] : data in all_cells };
+        assert Set(FD) subset translates;
+        
+        //for testing trivial side pairings
+        id_mat:=Matrix(2,2,[cl|1,0,0,1]);
+        neg_mat:=-id_mat;
+        // AML: this can't be right:
+        // S:=Matrix(2,2,[cl|0,-1,0,1]);
+        // on the other hand, this isn't either
+        // S:=Matrix(2,2,[cl|-1,0,0,1]);
+        // Maybe it's this
+        S:=Matrix(2,2,[cl|0,-1,1,0]);
+        
+        for f1 in FD do
+            pair := rep{p: p in all_cells|(f1 eq p[1]) and (order_in_psl2(p[2]) ne 1)};
+            g:=pair[2];
+            i:=Index(FD,f1);
+            f2:=inv(g^-1*f1);
+            j:=Index(FD,f2);
+            g0:=g*S;
+            side_pair[V.i]:=<g0,V.j>;
+            
+            //make stuff for fundamental domain
+            pol1:=polyhedron(H,f1) meet bub;
+            Append(~FD_SL2, pol1);
+            
+            // a facet of FD_SL2 corresponding to pol is
+            // where pol meets the sphere
+            // (there is another one potentially on the outside
+            // but we deal with that later)
+            curved1:=pol1 meet bottom; //index i; //num_curved
+            
+            //the curved portion is mapped to the other side via S
+            curved2:=polyhedron(H,f2) meet bottom;
+
+            assert curved1 eq g0*curved2;
+            assert polyhedron1(V.i) eq curved1;
+            assert polyhedron1(V.j) eq curved2;
+        end for;
+    end if;
+   
+
+    //VERTICAL TO VERTICAL
+    // takes about 40 seconds with tests. We are essentially copying over the side pairing for the stabilizer of infinity.
+    //t0:=Time();
+    vertical_facets:=[];
+    for i in [1..num_sides] do
+        e0:=sides[i];
+        g,eg:=Explode(side_pair_infty[e0]);
+        fe:=polyhedron(H,e0) meet bub;
+        feg:=polyhedron(H,eg) meet bub;
+        assert g*feg eq fe;
+          
+        a:=num_curved+i;
+        b:=num_curved+Index(sides,eg);
+        side_pair[V.a]:=<g,V.b>;
+        Append(~vertical_facets,V.a);
+    end for;
+    //Time(t0);
+    
+    /*
+    There have been issues matching the polyhedron from the adjacency procedures and the side pairing procedures. This tests is a quick check that the number of facets from the two procedures match.
+    */
+
+    // assert #codim1 eq #curved_facets+#vertical_facets;
+
+    /*
+    //I needed to print them out to check the numbering/indexing.
+
+    vertical_facets;
+    curved_facets;
+    */
+    
+    //This is a horrible hack.
+    //Something is weird about the universes of graphs
+    //so I'm overwriting the vertices in side_pair
+
+    E:=EdgeSet(G);
+    V:=VertexSet(G);
+    side_pair1:=AssociativeArray();
+    for k in Keys(side_pair) do
+        g,w:=Explode(side_pair[k]);
+        a:=Index(k);
+        b:=Index(w);
+        side_pair1[V.a]:=<g,V.b>;
+    end for;
+    side_pair:=side_pair1;
+
+    
+    //STEP: functions for converting combinatorial data into polyhedra and the main iteration of codim2 cell walks
+    
+    //NOTE: These functions depend on dictionaries that were previously defined.
+    
+    
+    //----------
+    function edge2(v,E1)
+    //----------
+    /*
+    This is the main computationally expensive piece.
+    Given a codim2 HypPol and a vertex v (corresponding to a HypPol facet) find the edge in the graph corresponding the E1.
+    */
+        F_prime:=polyhedron1(v);
+        for w in Neighbors(v) do
+            F1:=polyhedron1(w);
+            E2:=F_prime meet F1;
+            if E1 eq E2 then
+                return E!{v,w},w;
+            end if;
+        end for;
+        
+        error "There is no edge corresponding to E1 containing v in the graph";
+    end function;
+    
+    //----------
+    function next_step(v0,e0,side_pair)
+    //----------
+    /*
+    This is the main procedure for iterating over pairs of (codim1,codim2).
+    */
+        assert v0 in e0;
+        g,v0_prime:=Explode(side_pair[v0]);
+        E0:=polyhedron2(e0);
+        E1:=g^-1*E0;
+        e1,v1:=edge2(v0_prime,E1);
+        return g,v1,e1;
+    end function;
+    
+    //STEP (optional): Debug the side pairing.
+    
+    //TESTING THIS CURRENTLY.
+    side_pair_poly:=AssociativeArray();
+    keys:=[k : k in Keys(side_pair)];
+    for v in keys do
+        g,w:=Explode(side_pair[v]);
+        F_v:=polyhedron1(v);
+        F_w:=polyhedron1(w);
+        flag:=g*F_w eq F_v;
+        if not flag then
+            v_curved:=F_v subset bottom;
+            w_curved:=F_w subset bottom;
+            vprintf Clifford,3 :" input %o is curved, %o\n",v, v_curved;
+            vprintf Clifford,3: " output %o is curved, %o\n \n",w, w_curved;
+            error "the side pairing isn't pairing properly.";
+        end if;
+        assert flag;
+        side_pair_poly[F_v]:=<g,F_w>;
+    end for;
+    
+    //STEP: Prepare the codim2 cell that we want to walk around. Again, since we are building on the presentation of the stabilizer of infinity, and where the curved facets meet the curved facets don't give interesting relations, we just iterate over the codimension 2 cells where curved facets meet vertical facets. Also note that the vertex that is chosen to go with a particular edge matters. The relation when you start in one direction is not the inverse of the relation if you start in the opposite direction.
+
+    relations:=[];
+    lookup_dict:=AssociativeArray();
+    
+    //this block is if you want to iterate over all of the codim2 cells and not just the curved meet vertical.
+    //this takes several hours and I've never had it terminate.
+    /*
+    initial_data:=[];
+    for e in Edges(G) do
+        verts:=[v : v in EndVertices(e)];
+        for v in verts do
+            Append(~initial_data,<v,e>);
+        end for;
+    end for;
+    */
+    
+    //convert numbers to edges (working with edges in Magma is annoying, feel free to fix codim2_interesting)
+    codim2_interesting_edges:=[E!{V.i : i in e} : e in codim2_interesting];
+    
+    //adds each starting vertex
+    initial_data_interesting:=[];
+    for e in codim2_interesting_edges do
+        verts:=[v : v in EndVertices(e)];
+        for v in verts do
+            Append(~initial_data_interesting,<v,e>);
+        end for;
+    end for;
+    
+    //STEP: the main iteration for finding relations.
+    
+    //The main idea is to compile a dictionary to determine a lookup dictionary that tells us how each  (vertex,edge) transitions to another (vertex,edge) pair with the group element that takes us there. This makes sure that we don't run the expensive computation, next_step, twice unnecessarily.
+    
+    //After the dictionary is compiled enough for a relation we use the dictionary to compute a torsion element which sends the fundamental domain to itself.
+    
+    //After we have the torsion element we compute the relation.
+    
+    //Finally, we convert the relations which are lists of matrix elements into sequences that can be fed into Magma's GrpFP command.
+    
+    torsion_elements:=[];
+
+    for tup in initial_data_interesting do
+        vprint Clifford,4: RealField(2)!#Keys(lookup_dict)/#initial_data_interesting;
+        v:=tup[1];
+        e:=tup[2];
+        assert v in e;
+        
+        //we first store the transitions for codim1,codim2 pairs
+        //we do this to a complete loop
+        v0:=v;
+        e0:=e;
+
+        //t0:=Time();
+        while not <v0,e0> in Keys(lookup_dict) do
+            //v0;e0;
+            g,v1,e1:=next_step(v0,e0,side_pair);
+            lookup_dict[<v0,e0>]:=<g,v1,e1>;
+            v0:=v1;
+            e0:=e1;
+        end while;
+        //Time(t0);
+    end for;
+    
+    //STEP: Clean-up generators and relations
+
+    relations1:=codimension1_relations(side_pair);
+    relations2:=codimension2_relations(initial_data_interesting,lookup_dict);
+
+    S:=Matrix(2,2,[cl|0,-1,1,0]);
+    gens:={@ g : g in gens_infty @} join {@ S @};
+    
+    relations_set:=Set(relations1 cat relations2); //goes from 12 to 4 in the [-1,-2] maximal order
+
+    //convert them into numerical relations
+    rels:=[r : r in relations_set];
+    relations:=[];
+    for rel in rels do
+        relation:=[Index(gens,g) : g in rel];
+        Append(~relations,relation);
+    end for;
+    
+    rels_infty:=[Eltseq(r[1]*r[2]^-1) : r in Relations(stab_infty)];
+    relations:=relations cat rels_infty;
+    //test relations for stab(infty).
+    assert forall{ rel : rel in rels_infty |order_in_psl2(evaluate_relation(gens_infty,rel)) eq 1};
+
+    //test generators satisfy relations
+    assert forall{ rel : rel in relations |order_in_psl2(evaluate_relation(gens,rel)) eq 1};
+    
+    group_generators,relations:=lift_relations([g : g in gens],relations);
+    return group_generators,relations,G,side_pair,torsion_elements, polyhedron1, polyhedron2, edge2, next_step,side_pair_poly,FD_SL2;
+end function;

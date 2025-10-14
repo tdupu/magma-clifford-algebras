@@ -39,9 +39,16 @@ By convention, if a cusp is infinite, its magma_element will be infty.
 declare type SpcHypCliff[SpcHypCliffElt];
 declare type SetCspCliff[SetCspCliffElt];
 
-declare attributes SpcHypCliff: dimension, cusp_space, rational_clifford_algebra, real_clifford_algebra,boundary_clifford_algebra,action;
-declare attributes SpcHypCliffElt: clifford_algebra, magma_algebra, parent, boundary, height;
+declare attributes SpcHypCliff: cusps, big_clifford_algebra,affine_space;
+
+declare attributes SpcHypCliffElt: parent,vector,algebraic_point,real_algebraic_point,is_infinite;
+
+/*
+There are the base objects of our HypPol and HypPolt. These two classes rely on schemes and schematic points where the values of those points change. For this reason there needs to be the ability to take points in algebraically closed fields together with a choice of embedding which we carry around with a real number.
+*/
+
 declare attributes SetCspCliff: clifford_algebra, hyperbolic_space, hyperbolic_space_dimension,action;
+
 declare attributes SetCspCliffElt: clifford_algebra_element, magma_element, clifford_algebra, magma_algebra, is_infinite, parent;
 
 //CuspType,maps:=cop<CliffAlgElt,Infty>;
@@ -49,6 +56,8 @@ declare attributes SetCspCliffElt: clifford_algebra_element, magma_element, clif
 //infty_to_cusp:=maps[2];
 
 Q:=RationalField();
+Qbar:=AlgebraicClosure(Q);
+RR:=RealField();
 Z:=Integers();
 infty:=Infinity();
 
@@ -58,14 +67,15 @@ intrinsic cusps(cl::CliffAlg) -> SetCspCliff
 //#######################
 {
 
-Create a cusp as a SetCspCliffElt object.
+Create a cusp set as a SetCspCliffElt object.
     INPUT:
         --cl, rational clifford algebra of CliffAlg type whose clifford vectors comprise the boundary of hyperbolic n+1-space. This means the clifford algebra dimension needs to have clifford vectors of dimension n. The arity of the form will be n-1. An order in C is going to act on Hyperbolic n+1 space.
     OUTPUT:
         --The set of cusps.
 
 }
-
+  if assigned cl`cusp_set then return cl`cusp_set; end if;
+                               
     //%%%%%%%%%%%%%%%%%%%%%%%%
     function action(g,x)
     //%%%%%%%%%%%%%%%%%%%%%%%%
@@ -74,7 +84,7 @@ Create a cusp as a SetCspCliffElt object.
     */
     
     //testing regarding g and x needs to be implemented in the wrapper for this function.
-    
+
         a:=g[1][1];
         b:=g[1][2];
         c:=g[2][1];
@@ -101,9 +111,19 @@ Create a cusp as a SetCspCliffElt object.
   cusp_set`action:=action;
   d:=get_arity(cl);
   cusp_set`hyperbolic_space_dimension:=d+2;
-  
+
+  cl`cusp_set := cusp_set;
   return cusp_set;
 end intrinsic;
+
+/////////////////////////
+intrinsic 'eq'(cusps1::SetCspCliff,cusps2::SetCspCliff) -> SetCspCliff
+/////////////////////////
+{Determine if two sets of cusps are equal.}
+    return clifford_algebra(cusps1) eq clifford_algebra(cusps2);
+end intrinsic;
+
+
 
 
 //#######################
@@ -115,7 +135,6 @@ Create a cusp as a SetCspCliffElt object
 
 }
     require is_vec(x): "The clifford algebra element must be a clifford vector or infinite.";
-    
     my_cusp := New(SetCspCliffElt);
     my_cusp`parent:=cusp_set;
     my_cusp`clifford_algebra :=cusp_set`clifford_algebra;
@@ -129,50 +148,43 @@ end intrinsic;
 //#######################
 intrinsic get_magma_element(x::SetCspCliffElt)->.
 //#######################
-{}
-    return x`magma_element;
+{Get the underlying AlgClffElt, if possible}
+    return get_algebra_elt(x`clifford_algebra_element);
+end intrinsic;
+
+//#######################
+intrinsic dimension(cusps::SetCspCliff)->RngIntElt
+//#######################
+{Return the dimension of the boundary of the hyperbolic space}
+    cl:=clifford_algebra(cusps);
+    return arity(cl)+1;
 end intrinsic;
 
 
 //#######################
 intrinsic Print(cusps::SetCspCliff)
 //#######################
-{
-
-The print statement for SetCspCliff
-
-}
-
+{The print statement for SetCspCliff}
     printf "The set of cusps associated to %o", cusps`clifford_algebra;
-
 end intrinsic;
 
 
 //#######################
 intrinsic cusp(cusp_set::SetCspCliff, x::Infty) -> SetCspCliffElt
 //#######################
-{
-
-Create a cusp as a SetCspCliff object for a infinite elements.
-
-}
+{Create a cusp as a SetCspCliff object for an infinite element.}
     my_cusp := New(SetCspCliffElt);
     my_cusp`parent:=cusp_set;
     my_cusp`clifford_algebra :=cusp_set`clifford_algebra;
     my_cusp`is_infinite:=true;
     my_cusp`magma_element:=infty;
-    
     return my_cusp;
 end intrinsic;
 
 //#######################
 intrinsic cusp(cusp_set::SetCspCliff, x::AlgClffElt) -> SetCspCliffElt
 //#######################
-{
-
-Create a cusp as a SetCspCliff object for a infinite elements.
-
-}
+{Create a cusp as a SetCspCliffElt object for a non-infinite elements.}
     cl:=cusp_set`clifford_algebra;
     cl_mag:=get_algebra(cl);
     y:=cl_mag!x; //this will throw a good error if this is not possible.
@@ -183,51 +195,43 @@ end intrinsic;
 //#######################
 intrinsic infinity(cusp_set::SetCspCliff) -> SetCspCliffElt
 //#######################
-{
-
-Create a cusp as a SetCspCliff object for a infinite elements.
-
-}
+{Create a cusp as a SetCspCliff object for a infinite elements.}
     my_cusp:=New(SetCspCliffElt);
     my_cusp`is_infinite:=true;
     my_cusp`magma_element:=infty;
     my_cusp`parent:=cusp_set;
     my_cusp`clifford_algebra:=cusp_set`clifford_algebra;
     return my_cusp;
-    
 end intrinsic;
 
 //#######################
 intrinsic zero(cusp_set::SetCspCliff) -> SetCspCliffElt
 //#######################
-{
-
-Create a cusp as a SetCspCliff object for a infinite elements.
-
-}
-
+{Create a cusp as a SetCspCliff object for a infinite elements.}
     cl:=get_clifford_algebra(cusp_set);
     return cusp(cusp_set,cl!0);
-    
 end intrinsic;
 
 
 //#######################
 intrinsic Parent(cusp::SetCspCliffElt) -> SetCspCliff
 //#######################
-{
-    Return the parent of a cusp.
-}
+{Return the parent of a cusp.}
     return cusp`parent;
 end intrinsic;
 
 //#######################
 intrinsic 'eq'(a::SetCspCliffElt,b::SetCspCliffElt) -> BoolElt
 //#######################
-{
-    Returns is two cusps are equal.
-}
-    if is_infinite(a) then
+{Returns whether two cusps are equal.}
+  if is_infinite(a) and is_infinite(b) then
+    return true;
+  elif is_infinite(a) or is_infinite(b) then
+    return false;
+  else
+    return a`magma_element eq b`magma_element;
+  end if;
+    /*if is_infinite(a) then
         if is_infinite(b) then
             return true;
         else
@@ -239,11 +243,11 @@ intrinsic 'eq'(a::SetCspCliffElt,b::SetCspCliffElt) -> BoolElt
         elif a`magma_element eq b`magma_element then
             return true;
         end if;
-    end if;
+    end if;*/
 end intrinsic;
 
 //#######################
-intrinsic get_clifford_algebra(cusp_set::SetCspCliff) -> CliffAlg
+intrinsic clifford_algebra(cusp_set::SetCspCliff) -> CliffAlg
 //#######################
 {
     Get the clifford algebra of a set of cusps.
@@ -251,11 +255,20 @@ intrinsic get_clifford_algebra(cusp_set::SetCspCliff) -> CliffAlg
     return cusp_set`clifford_algebra;
 end intrinsic;
 
+//#######################
+intrinsic get_clifford_algebra(cusp_set::SetCspCliff) -> CliffAlg
+//#######################
+{
+    Alias for clifford_algebra with same signature.
+}
+    return clifford_algebra(cusp_set);
+end intrinsic;
+
 //#############################
 intrinsic IsCoercible(cusp_set::SetCspCliff, x::.) -> BoolElt, .
 //#############################
 {
-    Coersion for cusps.
+    Coercion for cusps.
 }
     //---printing---
     vprintf Clifford, 6: "Entering IsCoercible for SetCspCliff with type=%o, x=%o...\n",Type(x),x;
@@ -288,39 +301,6 @@ intrinsic is_infinite(x::SetCspCliffElt) -> BoolElt
 end intrinsic;
 
 
-//#######################
-intrinsic hyperbolic_space_with_cusps(n::RngIntElt,cl::CliffAlg) -> SpcHypCliff
-//#######################
-{
-
-Create a cusp as a SetCspCliffElt object
-
-}
-    d:=get_arity(cl);
-    require d+2 eq n: "The arity of the quadratic form plus 2 needs to be equal to the dimension of the hyperbolic space";
-    H := New(SpcHypCliff);
-    cusps:=cusps(cl);
-    cusps`hyperbolic_space_dimension:=n;
-    cusps`hyperbolic_space:=H;
-    H`real_clifford_algebra:=clifford_algebra(n);
-    H`rational_clifford_algebra:=cl; //this is wrong, it should be sqs cat [-1] and there should be some sort of automatic coersion.
-    H`cusps:=cusps;
-    H`dimension:=n;
-    
-    
-    return H;
-end intrinsic;
-
-//#######################
-intrinsic cusps(H:SpcHypCliff) -> SetCspCliff
-//#######################
-{
-    Get the cusps from a hyperbolic space.
-}
-    return H`cusps;
-end intrinsic;
-
-
 //This is surely bugged
 //#######################
 intrinsic Eltseq(x::SetCspCliffElt) -> SeqEnum[RngElt]
@@ -340,126 +320,12 @@ intrinsic Eltseq(x::SetCspCliffElt) -> SeqEnum[RngElt]
 end intrinsic;
 
 //#######################
-intrinsic hyp_pt(X::SpcHypCliff, eltseq::SeqEnum[RngElt]) -> SpcHypCliffElt
-//#######################
-{Create a point of hyperbolic space}
-    clR:=X`real_clifford_algebra;
-    clQ:=X`rational_clifford_algebra;
-    clB:=X`boundary_clifford_algebra;
-  require #eltseq eq #get_arity(clR) + 1: "The number of elements in the sequence is not of the correct dimension.";
-  // not good over number fields, etc.
-  require eltseq[#eltseq] ge 0: "The point must have non-negative height so that it will be in the correct half space";
-  pt := New(SpcHypCliffElt);
-  pt`parent:=X;
-  pt`is_infinite:=false;
-  pt`clifford_algebra := X`clifford_algebra;
-  pt`clifford_algebra_element := clR!eltseq;
-  pt`boundary := clB![eltseq..#eltseq-1];
-  pt`height := eltseq[#eltseq];
-  return pt;
-end intrinsic;
-
-//#######################
-intrinsic hyp_pt(X::CliffAlg, C::SeqEnum[RngElt], v:RngElt) -> SpcHypCliffElt
-//#######################
-{Create a point of hyperbolic space}
-  require #C eq #X`vecs: "wrong dimension";
-  return hyp_pt(X,Append(C,v));
-end intrinsic;
-
-//#######################
-intrinsic hyp_pt(cl::CliffAlg, cusp::SetCspCliffElt) -> SpcHypCliffElt
-//#######################
-{Create a point of (the boundary of) hyperbolic space from a cusp}
-  require cusps`alg eq cl`cliff_alg: "wrong algebra";
-  return hyp_pt(cl,Eltseq(cusp),0);
-end intrinsic;
-
-//#######################
-intrinsic height(x::SpcHypCliffElt) -> RngElt
+intrinsic cusps(H:SpcHypCliff) -> SetCspCliff
 //#######################
 {
-If x is an element of hyperbolic n space represented as a clifford vector in CC_n then it returns x_n the n+1st component of x.
+    Get the cusps from a hyperbolic space.
 }
-    require not is_infinite(x): "There is no height of an infty.";
-    
-    if not assigned x`height then
-        dimension:=Parent(x)`dimension;
-        x`height:=Eltseq(x)[dimension];
-    end if;
-        return x`height;
-end intrinsic;
-
-//#######################
-intrinsic boundary(x::SpcHypCliffElt) -> RngElt
-//#######################
-{
-If x is an element of hyperbolic n space represented as a clifford vector in CC_n then it returns x_n the n+1st component of x.
-}
-    if not assigned x`boundary then
-        H:=Parent(x);
-        dim:=dimension(H);
-        cl:=H`clifford_algebra;
-        x`boundary:=cl!Eltseq(x)[1..dimension-1];
-    end if;
-    
-    return x`boundary; //there needs to be some coercion into the rational clifford algebra
-end intrinsic;
-
-//#######################
-intrinsic cusp(cusp_space::SetCspCliff, x::SpcHypCliffElt) -> SetCspCliffElt
-//#######################
-{Cusp from hyperbolic point on boundary}
-    
-    require height(x) eq 0: "Must be boundary point to convert to cusp. This means the last component must be zero";
-    c := cusp(cusp_space,boundary(x));
-    return c;
-end intrinsic;
-
-
-//duplicate
-//#######################
-intrinsic action(X::Cliff2x2, C::SetCspCliffElt) -> SetCspCliffElt
-//#######################
-{Matrix action on cusps.}
-  cl := C`alg;
-  if C`elt eq cl`cusp_univ!"infinity" then
-    if X`mat[2,1] eq 0 then
-      return cl;
-    else
-      return cusp(cl,X`mat[1,1]/X`mat[2,1]);
-    end if;
-  else
-    a11,a12,a21,a22 := Explode(Eltseq(X`mat));
-    v := C`elt;
-    if a21*v+a22 eq 0 then
-      return cusp(cl,"infinity");
-    else
-      first := ((a11*v+a12)*cl`bar(a21*v+a22))/(cl`nm(a21*v+a22));
-      assert cl`is_vec(first);
-      return cusp(cl,[first[i]: i in cl`vec_inds]);
-    end if;
-  end if;
-end intrinsic;
-
-//duplicate
-//#######################=
-intrinsic action(X::Cliff2x2, C::SpcHypCliffElt) -> SpcHypCliffElt
-//#######################
-{Matrix action on hyperbolic space}
-  cl := X`alg;
-  if C`second eq 0 then
-    return action(X,cusp(C));
-  else
-    a11,a12,a21,a22 := Explode(Eltseq(X`mat));
-    v := C`boundary;
-    y := C`second;
-    first := ((a11*v+a12)*cl`bar(a21*v+a22)+a11*cl`bar(a21)*y^2)/(cl`nm(a21*v+a22)+cl`nm(a21)*y^2);
-    second := y/(cl`nm(a21*v+a22)+cl`nm(a21)*y^2);
-    assert cl`is_vec(first);
-    pt := hyp_pt(X`alg,[first[i]: i in cl`vec_inds],second);
-    return pt;
-  end if;
+    return H`cusps;
 end intrinsic;
 
 //#############################
@@ -473,6 +339,15 @@ intrinsic '@'(x::SetCspCliffElt,g::AlgMatElt) -> SpcCspCliffElt
 end intrinsic;
 
 //#############################
+intrinsic '@'(x::SetCspCliffElt,g::GrpMatElt) -> SpcCspCliffElt
+//#############################
+{
+ The function which allows for g(x) to make sense on a SetCspElt.
+}
+    return g*x;
+end intrinsic;
+
+//#############################
 intrinsic get_magma_value(y::SetCspCliffElt) -> .
 //#############################
 {
@@ -482,13 +357,22 @@ intrinsic get_magma_value(y::SetCspCliffElt) -> .
 end intrinsic;
 
 //#############################
-intrinsic get_clifford_vector(y::SetCspCliffElt) -> .
+intrinsic clifford_vector(y::SetCspCliffElt) -> .
 //#############################
 {
  Using the ordering on magma AlgClff elements to order cusps.
 }
-    cl:=get_clifford_algebra(Parent(y));
+    cl:=clifford_algebra(Parent(y));
     return cl!y;
+end intrinsic;
+
+//#############################
+intrinsic get_clifford_vector(y::SetCspCliffElt) -> .
+//#############################
+{
+Return the clifford vector associated to a cusp.
+}
+    return clifford_vector(y);
 end intrinsic;
 
 //#############################
@@ -567,6 +451,13 @@ intrinsic 'lt'(y::SetCspCliffElt,x::SetCspCliffElt) -> SpcCspCliffElt
 end intrinsic;
 
 //#############################
+intrinsic '*'(g::GrpMatElt,x::SetCspCliffElt) -> SpcCspCliffElt
+//#############################
+{}
+  return (MatrixAlgebra(Parent(g[1,1]),2)!Eltseq(g))*x;
+end intrinsic;
+
+//#############################
 intrinsic '*'(g::AlgMatElt,x::SetCspCliffElt) -> SpcCspCliffElt
 //#############################
 {
@@ -576,14 +467,55 @@ intrinsic '*'(g::AlgMatElt,x::SetCspCliffElt) -> SpcCspCliffElt
 end intrinsic;
 
 
-//analog of g * z : GrpPSL2Elt, SpcHypElt -> SpcHypElt
+////////////////////
+intrinsic map_of_affine_space(H::SpcHypCliff,mat::AlgMatElt)->Map,SeqEnum
+////////////////////
+{Given an element of SL2(cl) and the associated Satake compactified hyperbolic space return the morphism of schemes AN->AN of the 2x2 matrix. }
+
+    cl:=clifford_algebra(H);
+
+    //create a field so that the entries of the clifford vector can be generic
+    R<[a]>:=PolynomialRing(Q,dimension(H));
+    F<[a]>:=FieldOfFractions(R);
+    
+    //construct the big clifford algebra with coefficients in the generic field
+    sqs:=squares(cl);
+    clF<[I]>:=clifford_algebra(F,sqs cat [-1]);
+    
+    //generic clifford vector
+    x_general:=a[1]+&+[a[i+1]*I[i] : i in [1..arity(clF)]];
+    
+    //view out matrix as in the big clifford group
+    matF:=Matrix(2,2,[clF!a : a in Eltseq(mat)]);
+    
+    //make an action
+    a,b,c,d:=Explode(Eltseq(matF));
+    y_general:=(a*x_general+b)*(c*x_general+d)^(-1);
+    
+    //extract the rational functions which define the element
+    //then define the map on the appropriate affine space
+    y_vec:=vector(y_general);
+    seq:=Eltseq(y_vec);
+    AN:=affine_space(H);
+    defining_rational_functions:=[Evaluate(s,[AN.i : i in [1..Dimension(AN)]]): s in seq];
+    map_g:=map<AN->AN|defining_rational_functions>;
+    return map_g,defining_rational_functions;
+end intrinsic;
+
 //#############################
-intrinsic '*'(g::AlgMatElt,x::SpcHypCliffElt) -> SpcHypCliffElt
+intrinsic '*'(g::AlgMatElt,pt::SpcHypCliffElt) -> SpcHypCliffElt
 //#############################
 {
- The function which allows for g(x) to make sense on a SetCspElt.
+ The function which allows for g(pt) to make sense on a SpcHypCliffElt.
 }
-    return g(x); //not implemented
+    H:=Parent(pt);
+    pt_alg:=algebraic_point(pt);
+    /*
+    this is a bad way of doing this
+    we should use big clifford algebra in the future
+    */
+    g_alg:=map_of_affine_space(H,g);
+    return H!Eltseq(g_alg(pt_alg));
 end intrinsic;
 
 //g * z : GrpPSL2Elt, [SpcHypElt] -> [SpcHypElt]
@@ -638,11 +570,14 @@ end intrinsic;
 intrinsic Hash(x::SetCspCliffElt) -> RngIntElt
 //############################
 {Return a hash value for the object x (should be between 0 and 2^31-1)}
-   x_mag:=get_magma_element(x);
-   return Hash(x_mag);
+    if not is_infinite(x) then
+        x_mag:=get_magma_element(x);
+        return Hash(x_mag);
+    else
+        cl:=clifford_algebra(Parent(x));
+        return Hash(<cl,0>);
+    end if;
 end intrinsic;
-
-
 
 
 //##########################
@@ -651,4 +586,401 @@ intrinsic random_cusp(cusp_set::SetCspCliff)->SetCspCliffElt
 {}
     cl:=get_clifford_algebra(cusp_set);
     return cusp(cusp_set,random_clifford_vector(cl));
+end intrinsic;
+
+
+
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+//
+// HYPERBOLIC SPACE
+//
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+
+
+
+//#######################
+intrinsic hyperbolic_space(cl::CliffAlg) -> SpcHypCliff
+//#######################
+{
+Create a partial Satake compactified hyperbolic space with cusps from the designated Clifford algebra.
+}
+  cusps:=cusps(cl);
+  if assigned cusps`hyperbolic_space then
+    return cusps`hyperbolic_space;
+  else
+    H := New(SpcHypCliff);
+    cl_big:=extend(cl);
+    H`cusps:=cusps;
+    H`affine_space:=AffineSpace(Q,arity(cl)+2);
+    H`big_clifford_algebra:=cl_big;
+    cusps`hyperbolic_space:=H;
+    return H;
+  end if;
+end intrinsic;
+
+//#######################
+intrinsic hyperbolic_space_with_cusps(cl::CliffAlg) -> SpcHypCliff
+//#######################
+{
+Create a partial Satake compactified hyperbolic space with cusps from the designated Clifford algebra.
+}
+    return hyperbolic_space(cl);
+end intrinsic;
+
+//#######################
+intrinsic hyperbolic_space(cusps::SetCspCliff)->SpcHypCliff
+//#######################
+{Return the Satake compactified hyperbolic space of which cusps is the boundary}
+    return hyperbolic_space(clifford_algebra(cusps));
+end intrinsic;
+
+
+//#######################
+intrinsic 'eq'(H1::SpcHypCliff,H2::SpcHypCliff)->BoolElt
+//#######################
+{Test equality of hyperbolic spaces.}
+    return  H1`cusps eq H2`cusps and H1`affine_space eq H2`affine_space;
+end intrinsic;
+
+
+//#######################
+intrinsic Print(H::SpcHypCliff)
+//#######################
+{The print statement for SpcHypCliff
+}
+    printf "Satake compactified hyperbolic space of dimension %o with clifford vectors from %o", dimension(H),clifford_algebra(H);
+end intrinsic;
+
+//#######################
+intrinsic Print(pt::SpcHypCliffElt)
+//#######################
+{The print statement for SpcHypCliffElt
+}
+    if is_infinite(pt) then
+        printf "infinity";
+    else
+        printf "%o", [RealField(4)!x : x in Eltseq(real_algebraic_point(pt))];
+    end if;
+end intrinsic;
+
+
+//#######################
+intrinsic cusps(H::SpcHypCliff) -> SetCspCliff
+//#######################
+{
+Return the cusps for the boundary of the hyperbolic space.
+}
+    return H`cusps;
+end intrinsic;
+
+//#######################
+intrinsic clifford_algebra(H::SpcHypCliff) -> CliffAlg
+//#######################
+{
+Return the clifford algebra of the base of the underlying space.
+}
+    return clifford_algebra(cusps(H));
+end intrinsic;
+
+//#######################
+intrinsic dimension(H::SpcHypCliff) -> RngIntElt
+//#######################
+{
+Return the dimension of the hyperbolic space.
+}
+    return arity(clifford_algebra(cusps(H)))+2;
+end intrinsic;
+
+/////////////////////////
+intrinsic affine_space(H::SpcHypCliff)->Sch
+/////////////////////////
+{Return a copy of affine space of the appropriate dimension}
+    if not assigned H`affine_space then
+        H`affine_space:= AffineSpace(Q,dimension(H));
+    end if;
+    
+    return H`affine_space;
+end intrinsic;
+
+////////////////////
+intrinsic algebraic_point(pt::SpcHypCliffElt)->Pt
+////////////////////
+{Convert a point in hyperbolic space to a point in affine space.}
+    if not assigned pt`algebraic_point then
+        AN:=affine_space(Parent(pt));
+        seq:=Eltseq(pt);
+        F:=Parent(seq[1]);
+        pt`algebraic_point:=AN(F)!seq;
+    end if;
+        return pt`algebraic_point;
+end intrinsic;
+
+////////////////////
+intrinsic real_algebraic_point(pt::SpcHypCliffElt)->Pt
+////////////////////
+{Convert a point in hyperbolic space to a point in affine space with values in a real field.
+This may need to be modified to account for other coordinates. There should only be a single real embedding for this to work.}
+    if not assigned pt`real_algebraic_point then
+        H:=Parent(pt);
+        AN:=affine_space(H);
+        n:=dimension(H);
+        RR:=RealField();
+        seq:=Eltseq(pt);
+        num:=Eltseq(pt)[n];
+        fy:=MinimalPolynomial(num);
+        if Degree(fy) eq 1 then
+            seq0:=[RR!Q!s : s in seq];
+        else
+            F<a>:=NumberField(fy);
+            y_val:=[ x : x in RealEmbeddings(a) | x gt 0][1];
+            seq0:=[RR!Q!s : s in seq[1..n-1]] cat [RR!y_val];
+        end if;
+        pt`real_algebraic_point:=AN(RR)!seq0;
+    end if;
+        return pt`real_algebraic_point;
+end intrinsic;
+
+
+
+//#######################
+intrinsic elt(H::SpcHypCliff, eltseq::SeqEnum[RngElt]) -> SpcHypCliffElt
+//#######################
+{Create a point of hyperbolic space}
+    
+    N:=dimension(H);
+
+    require #eltseq eq N: "The number of elements in the sequence is not of the correct dimension.";
+    require eltseq[N] ge 0: "eltseq must have a non-negative height.";
+    
+    //AN:=affine_space(H);
+    
+    pt := New(SpcHypCliffElt);
+    pt`parent:=H;
+    pt`vector:=Vector(eltseq);
+    //pt`vector:=AN(Qbar)!eltseq;
+    pt`is_infinite:=false;
+    
+    return pt;
+end intrinsic;
+
+
+//#######################
+intrinsic Parent(pt::SpcHypCliffElt) -> SpcHypCliff
+//#######################
+{Return the underlying hyperbolic space of a point in hyperbolic space.}
+    return pt`parent;
+end intrinsic;
+
+//#######################
+intrinsic is_infinite(x::SpcHypCliffElt) -> BoolElt
+//#######################
+{Create a point of hyperbolic space}
+    return x`is_infinite;
+end intrinsic;
+
+//#######################
+intrinsic Eltseq(x::SpcHypCliffElt) -> SeqEnum[RngElt]
+//#######################
+{Return the Eltseq of the corresponding vector if possible.}
+    require not is_infinite(x): "element must not be infinite";
+    return Eltseq(vector(x));
+    
+end intrinsic;
+
+//#######################
+intrinsic infinity(H::SpcHypCliff) -> SpcHypCliffElt
+//#######################
+{Create an infinite element for hyperbolic space.}
+    pt:=New(SpcHypCliffElt);
+    pt`is_infinite:=true;
+    pt`vector:=infty;
+    pt`parent:=H;
+    return pt;
+end intrinsic;
+
+////////////////////////
+intrinsic vector(pt::SpcHypCliffElt)->ModTupRngElt
+////////////////////////
+{Return the coordinates of the point in hyperbolic space}
+    require not is_infinite(pt): "Can't be an infinite point of partial Satake compactified hyperbolic space";
+    return pt`vector;
+end intrinsic;
+
+
+//#######################
+intrinsic height(x::SpcHypCliffElt) -> RngElt
+//#######################
+{
+Get the last component of an element of hyperbolic space. All cusps (as hyperbolic space elements) are defined to have height zero. In particular infinity has height zero.
+}
+    if is_infinite(x) then
+        return 0;
+    else
+        seq:=Eltseq(x);
+        return seq[#seq];
+    end if;
+end intrinsic;
+
+
+//#######################
+intrinsic is_cusp(x::SpcHypCliffElt) -> BoolElt,.
+//#######################
+{Determine if an element is in the boundary of compactified hyperbolic space.}
+    if is_infinite(x) then
+        return true, infinity(cusps(Parent(x)));
+    else
+        v:=Eltseq(x);
+        if v[#v] eq 0 then
+            return true, cusps(Parent(x))! [v[i]:i in [1..#v-1]];
+        else
+            return false;
+        end if;
+    end if;
+end intrinsic;
+
+//#######################
+intrinsic cusp(x::SpcHypCliffElt) -> SetCspCliffElt
+//#######################
+{Return the element as SetCspCliffElt if possible.}
+    flag,c:=is_cusp(x);
+    require flag: "Element is not a cusp.";
+    return c;
+end intrinsic;
+
+//#######################
+intrinsic elt(H::SpcHypCliff,x::ModTupRngElt) -> SpcHypCliffElt
+//#######################
+{Determine if an element is in the boundary of compactified hyperbolic space.}
+    return H! Eltseq(x);
+end intrinsic;
+
+//#######################
+intrinsic elt(H::SpcHypCliff,x::Pt[FldAC]) -> SpcHypCliffElt
+//#######################
+{Construct of Satake compactified hyperbolic space from a Qbar-point in affine space. The point should be totally real.}
+    return H! Eltseq(x);
+end intrinsic;
+
+//#######################
+intrinsic elt(H::SpcHypCliff,x::CliffAlgElt) -> BoolElt
+//#######################
+{If x is a Clifford vector coercible into hyperbolic space then  }
+    cl_big:=big_clifford_algebra(H);
+    
+    if x in cl_big then
+        return H!vector(x); //this will return an error if x is not a clifford vector.
+    else
+        require is_extension(cl_big,Parent(x)): "The big Clifford algebra of H must be an extension of the parent of x.";
+        return H!cl_big!x;
+    end if;
+end intrinsic;
+
+//#######################
+intrinsic big_clifford_algebra(H::SpcHypCliff) -> CliffAlg
+//#######################
+{Return the big clifford algebra.}
+    return H`big_clifford_algebra;
+end intrinsic;
+
+//#######################
+intrinsic clifford_vector(x::SpcHypCliffElt) -> CliffAlgElt
+//#######################
+{Return x and an element of the big clifford algebra.}
+    cl_big:=big_clifford_algebra(Parent(x));
+    return clifford_vector(cl_big,vector(x));;
+end intrinsic;
+
+
+//#######################
+intrinsic 'eq'(x::SpcHypCliffElt,y::SpcHypCliffElt) -> BoolElt
+//#######################
+{Determines if two element of hyperbolic space are equal.}
+    if is_infinite(x) and is_infinite(y) then return true;
+    elif is_infinite(x) or is_infinite(y) then return false;
+    else
+        //return vector(x) eq vector(y);
+        return real_algebraic_point(x) eq real_algebraic_point(y);
+    end if;
+end intrinsic;
+
+//#######################
+intrinsic elt(H::SpcHypCliff,y::SetCspCliffElt) -> SpcHypCliffElt
+//#######################
+{Creates an element of compactified hyperbolic space from a cusp.}
+    require cusps(H) eq Parent(y): "The cusp must be a cusp of the Satake compactification. The Clifford algebras do not match.";
+    
+    if is_infinite(y) then
+        return infinity(H);
+    else
+        cl_big:=big_clifford_algebra(H);
+        return H!cl_big!clifford_vector(y);
+    end if;
+end intrinsic;
+
+
+
+
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+
+intrinsic IsCoercible(C::SetCspCliff,pt::SpcHypCliffElt)->BoolElt,.
+{}
+    seq:=Eltseq(pt);
+    if dimension(C)+1 eq #seq then
+        if seq[#seq] eq 0 then
+            cl:=clifford_algebra(C);
+            v:=clifford_vector(cl,Vector([seq[i] : i in [1..#seq-1]]));
+            return true, C!v;
+        else return
+            false;
+        end if;
+    else
+        return false;
+    end if;
+end intrinsic;
+
+
+intrinsic IsCoercible(H::SpcHypCliff,x::.)->BoolElt,.
+{}
+    if Type(x) eq SpcHypCliffElt then
+        if Parent(x) eq H then
+            return true, x;
+        elif is_infinite(x) then
+            return true, infinity(H);
+        else
+            return true, elt(H,Eltseq(x));
+        end if;
+    elif Type(x) eq Pt then
+        if Parent(x) eq affine_space(H) then
+            return true,H!Eltseq(x);
+        else
+            return false;
+        end if;
+    else
+        return true, elt(H,x);
+    end if;
+end intrinsic;
+
+
+
+////////////////////
+intrinsic cusps(SL2O::GrpPSL2Cliff,PSigma::GrpFP)->SeqEnum[SetCspCliffElt],SeqEnum[AlgMatElt]
+////////////////////
+{Compute a collection of representatives of cusps of PSigma subset PSL2O and a collection of matrices g such that g(infty) is that representative. The algorithm uses a double coset decomposition. Here the orbit of infinity under PSL2(O) is isomorphic to PSL2(O)/stab as a set with a group action. It has a left action by PSigma and hence PSigma\PSL2(O)/stab is in bijection with orbits of the cusps under PSigma.
+}
+    O:=clifford_order(SL2O);
+    cl:=clifford_algebra(O);
+    csps:=cusps(cl);
+    infty:=infinity(csps);
+    psl2_quo:=fp_group(SL2O);
+    sl2_infty,stab_to_psl2,gens_infty:=stabilizer_infty(SL2O);
+    psl2_infty:=stab_to_psl2(sl2_infty);
+    transversal_fp,rep_map:=Transversal(psl2_quo,PSigma,psl2_infty);
+    transversal_mat:=[fp_element_to_matrix(SL2O,g) : g in transversal_fp];
+    return [g(infty) : g in transversal_mat],transversal_mat;
 end intrinsic;

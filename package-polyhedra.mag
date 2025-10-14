@@ -1,0 +1,1515 @@
+Q:=RationalField();
+Qbar:=AlgebraicClosure(Q);
+RR:=RealField();
+Z:=IntegerRing();
+
+
+/*
+There are a set of half spaces defining a convex polyhedron. There have meets but not joins—the union of two convex polyhedra is not a convex polyhedra.
+
+The boundary is not itself a convex polytope, but each face itself is. The boundary is a polyhedral complex. It is described by a scheme and an underlying set of points that are the zero faces.
+*/
+
+
+
+/*
+Claim.
+The geodesic between any two points is the intersection of a flat hyperplane containing it and a curves hyperplane containing it.
+
+The vertical hyperplane containing the two points is clear. It corresponds to the line in the boundary connecting the two points. It is two dimensional.
+
+For the sphere centered at the boundary once you fix a point, any curved hyperplane will be determined by the center in the boundary. (You can think about moving the center of the sphere around but "pinned" to a given point and then having that sphere intersecting another sphere. )
+
+In any direction of the boundary away from the pinned point there is a halfspace in the boundary defined by the projection of the pinned point and the direction. If that half space contains the projection of the other point, then eventually there will exist a radius that will intersect the other point. So there exists an (N-1)-1 dimensional set of spheres containing the two points.
+/*
+
+/*
+Formula I want to save for later:
+
+Ratcliffe section 4.6, Theorem 4.6.1
+
+cosh d(x,y) = 1+|x-y|^2/2*x[n]*y[n]
+*/
+
+
+/*
+For polytopes, we take the scheme and the extremal point.
+
+The faces are the irreducible components with the extremal points that are contained in it.
+*/
+
+
+/*
+Ratcliffe Theorem 4.6.4
+
+Hyperbolic spheres:
+--Euclidean spheres contained in the upper half space.
+*/
+
+
+/*
+Ratcliff Theorem 4.6.5
+
+Horosphere based at b in the boundary
+--b=infty, and Euclidean hyperplane parallel to boundary
+--b != infty, and Euclidean sphere tangent at b
+*/
+
+
+declare type HypPol;
+declare attributes HypPol: hyperbolic_space, flat_halfspaces, curved_halfspaces, vertices, polytope, faces;
+
+/*
+Better method for vertices of HypPol: really we should have the vertices of HypPol return the vertices of the HypPolt provided they exist. This might require some careful thinking. Right now it is going to return infinity as a vertex of everything. We need to test if something is a polytope. Really, we need a non-empty cluster for the polytope to exist.
+*/
+
+declare type HypPolt;
+declare attributes HypPolt: hyperbolic_space, vertices, scheme, cluster, polyhedron, faces;
+/*
+A hyperbolic polytope is going to be the convex hull of a finite set of points. It's sides are going to be represented by a scheme which is the union of hyperplanes that contain it. The vertices are going to be HypSpcCliffElts and they are going to be points in the splitting field of the cluster.
+
+This representation makes things like the facets to compute. The facets then are going to be determined by the irreducible components of the underlying scheme together with the points that are contained within those facets.
+
+The action of the AlgMatElt[AlgClff] is going to be determined by the action on the vertices and the underlying scheme.
+
+The halfspaces are going to be determined by the equations of the irreducible component and the sign of the inequality is determined by whether the points evaluate to something greater than or equal to zero. We need to write a little function for this.
+*/
+
+
+declare type PolComp;
+declare attributes PolComp: ambient, polyhedra,faces;
+
+/*
+The polyhedron defined by the system of inequalities Aiv≥ci for each vector Ai and integer ci.
+
+*/
+
+/////////////////////////
+intrinsic empty_polyhedron(H::SpcHypCliff)->HypPol
+/////////////////////////
+{Return all of H as a polyhedron.}
+    P:=New(HypPol);
+    P`curved_halfspaces:={};
+    P`flat_halfspaces:={};
+    P`hyperbolic_space:=H;
+    return P;
+end intrinsic;
+
+/////////////////////////
+intrinsic is_full(pol::HypPol)->BoolElt
+/////////////////////////
+{Is the polyhedron all of hyperbolic space?}
+    return #halfspaces(pol) eq 0;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic sphere_equation(pt_csp::SetCspCliffElt, rad::.)->RngMPolElt,Sch
+/////////////////////////
+{Find the algebraic equation of a sphere. This is coded to work with clifford algebra so it is impossible to mess up conventions. We take an element of a clifford algebra with the correct multiplication rules over a function field with N indeterminates, where N is the dimension of the hyperbolic space, then compute the equation of a sphere there using Weil restriction.}
+
+    //stuff we need
+    H:=hyperbolic_space(Parent(pt_csp));
+    N:=dimension(H);
+    cl:=clifford_algebra(H);
+    cl_big:=big_clifford_algebra(H);
+    AN:=affine_space(H);
+    
+    //We will first create a bubble of radius rad^2.
+    
+    //create function field for coeffs
+    R<[a]>:=PolynomialRing(Q,dimension(H));
+    F<[a]>:=FieldOfFractions(R);
+    sqs:=squares(cl);
+    clF<[I]>:=clifford_algebra(F,sqs cat [-1]);
+    
+    //generic clifford vector
+    x_general:=a[1]+&+[a[i+1]*I[i] : i in [1..arity(clF)]];
+    
+    //equation of the sphere
+    y_general:=nm(x_general)-rad^2;
+    
+    //extract the coefficients (Weil restriction)
+    y_vec:=vector(y_general);
+    seq:=Eltseq(y_vec);
+    eqn0:=seq[1];
+    
+    //now we turn it into a scheme by converting it to an element of the coordinate ring for the appropriate affine space.
+    eqn1:=CoordinateRing(AN)!Evaluate(eqn0,[AN.i : i in [1..dimension(H)]]);
+    sphere := Scheme(AN,eqn1);
+    
+    //now to take account for translations we use the built-in translation mechanism for schemes
+    pt_AN:=AN!Eltseq(-vector(cl_big!clifford_vector(pt_csp)));
+    f:=Translation(AN,pt_AN);
+    my_sphere:=f(sphere);
+    eqn:=Generators(Ideal(my_sphere))[1];
+    assert eqn in CoordinateRing(AN);
+    
+    //normalize the equation
+    return CoordinateRing(AN)!(eqn/AbsoluteValue(LeadingCoefficient(eqn))),my_sphere;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic curved_halfspace(H::SpcHypCliff,eqn::RngMPolElt,sgn::RngIntElt)->HypPol
+/////////////////////////
+{}
+    P:=New(HypPol);
+    AN:=affine_space(H);
+    eqn0:=Evaluate(eqn,[AN.i : i in [1..dimension(H)]]);
+    eqn1:=eqn0/AbsoluteValue(LeadingCoefficient(eqn0));
+    assert eqn1 in CoordinateRing(AN);
+    P`curved_halfspaces:={<CoordinateRing(AN)!eqn1,sgn>};
+    P`flat_halfspaces:={};
+    P`hyperbolic_space:=H;
+    return P;
+end intrinsic;
+
+/////////////////////////
+function ellipsoid_data(f)
+/////////////////////////
+    P:=Parent(f);
+    zeros:=[ 0 : i in [1..Ngens(P)]];
+
+    translates:=[];
+    centers:=[];
+    scale:=[];
+
+    cv:=f;
+    c:=Evaluate(cv,zeros);
+
+
+    for i in [1..Ngens(P)] do
+        v:=P.i;
+        av:=Derivative(f,2,v)/2;
+        bv:=Derivative(f,1,v);
+
+        a:=Evaluate(av,zeros);
+        b:=Evaluate(bv,zeros);
+        //assert f1 eq a*v^2+b*v+c;
+
+        cen:=-b/(2*a);
+        coeff:=a;
+        trans:=-a*(cen)^2;
+        rebuild:=coeff*(v-cen)^2+trans;
+
+        Append(~scale,coeff);
+        Append(~centers,cen);
+        Append(~translates,trans);
+    end for;
+
+    translate:=&+(translates)+c;
+    rebuild:=&+[scale[i]*(P.i-centers[i])^2 : i in [1..Ngens(P)]]+translate;
+    assert rebuild eq f;
+    
+    return scale,centers,translate;
+end function;
+
+/////////////////////////
+intrinsic center(H::SpcHypCliff)->SpcHypCliffElt
+/////////////////////////
+{Return the center of the curve halfspace}
+    eqn:=equation(H);
+    center,radius,translate:=ellipsoid_data(eqn);
+    return center;
+end intrinsic;
+
+/////////////////////////
+intrinsic radius_squared(H::SpcHypCliff)->.
+/////////////////////////
+{Return the center of the curve halfspace}
+    eqn:=equation(H);
+    center,radius,translate:=ellipsoid_data(eqn);
+    return radius^2; //not sure if that is right.
+end intrinsic;
+
+/////////////////////////
+intrinsic curved_halfspace(cen::SpcHypCliffElt,rad::.)->HypPol
+/////////////////////////
+{}
+    H:=Parent(cen);
+    AN:=affine_space(H);
+    C:=cusps(H);
+    pt_csp:=C!cen;
+    eqn:=sphere_equation(pt_csp,rad);
+    sgn:=+1;
+    
+    P:=New(HypPol);
+    eqn0:=eqn/AbsoluteValue(LeadingCoefficient(eqn));
+    P`curved_halfspaces:={<eqn0,sgn>};
+    P`flat_halfspaces:={};
+    P`hyperbolic_space:=H;
+    return P;
+end intrinsic;
+
+/////////////////////////
+intrinsic curved_halfspace(cen::SetCspCliffElt,rad::.)->HypPol
+/////////////////////////
+{}
+    H:=hyperbolic_space(Parent(cen));
+    cen_H:=H!cen;
+    return curved_halfspace(cen_H,rad);
+end intrinsic;
+
+/////////////////////////
+intrinsic bubble(H::SpcHypCliff)->HypPol
+/////////////////////////
+{Return the region associated to x0^2 + ... + xn^2 >=1 (in the ellipsoid coordinates).}
+
+    C:=cusps(H);
+    cl:=clifford_algebra(H);
+    pt_cusp:=H!C!cl!0;
+    return flip(curved_halfspace(pt_cusp,1));
+
+end intrinsic;
+
+/////////////////////////
+intrinsic center_and_radius_squared(pol::HypPol)->HypPolElt,FldRatElt
+/////////////////////////
+{Given curved halfspace find the center and radius squared of the associated sphere.}
+    require is_curved_halfspace(pol): "Only curved halfspaces have a center and radius";
+    H:=hyperbolic_space(pol);
+    eqn:=equation(pol);
+    scale,centers,neg_radsq:=ellipsoid_data(eqn);
+    return H!centers,-neg_radsq;
+end intrinsic;
+
+intrinsic halfspace(H::SpcHypCliff,eqn::RngMPolElt,sgn::RngIntElt)->HypPol
+{Given a hyperbolic space, an equation f of a geodesic plane in the halfspace model and a sgn return the hyperbolic polyhedron defined by the halfspace sign*f <=0 }
+    AN:=affine_space(H);
+    eqn0:=CoordinateRing(AN)!eqn;
+    if Degree(eqn0) eq 1 then
+        return flat_halfspace(H,eqn0,sgn);
+    elif Degree(eqn0) eq 2 then
+        return curved_halfspace(H,eqn0,sgn);
+    else
+        error "The equation must be for a plane or a sphere whose center is on the boundary of hyperbolic space.";
+    end if;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic flat_halfspace(H::SpcHypCliff,eqn::RngMPolElt,sgn::RngIntElt)->HypPol
+/////////////////////////
+{}
+    P:=New(HypPol);
+    eqn0:=eqn/AbsoluteValue(LeadingCoefficient(eqn));
+    P`flat_halfspaces:={<eqn0,sgn>};
+    P`curved_halfspaces:={};
+    P`hyperbolic_space:=H;
+    return P;
+    
+end intrinsic;
+
+/////////////////////////
+intrinsic hyperbolic_space(pol::HypPol)->SpcHypCliff
+/////////////////////////
+{}
+    return pol`hyperbolic_space;
+end intrinsic;
+
+/////////////////////////
+intrinsic curved_halfspaces(pol::HypPol)->SetEnum[HypPol]
+/////////////////////////
+{}
+    H:=hyperbolic_space(pol);
+    return {curved_halfspace(H,x[1],x[2]) : x in pol`curved_halfspaces};
+end intrinsic;
+
+/////////////////////////
+intrinsic flat_halfspaces(pol::HypPol)->SetEnum[HypPol]
+/////////////////////////
+{}
+    H:=hyperbolic_space(pol);
+    return {flat_halfspace(H,x[1],x[2]) : x in pol`flat_halfspaces};
+end intrinsic;
+
+/////////////////////////
+intrinsic is_halfspace(pol::HypPol)->SetEnum[Tup]
+/////////////////////////
+{}
+    return #curved_halfspaces(pol)+#flat_halfspaces(pol) eq 1;
+end intrinsic;
+
+/////////////////////////
+intrinsic is_curved(pol::HypPol)->BoolElt
+/////////////////////////
+{}
+    return #pol`flat_halfspaces eq 0;
+end intrinsic;
+
+/////////////////////////
+intrinsic is_flat(pol::HypPol)->BoolElt
+/////////////////////////
+{}
+    return #pol`curved_halfspaces eq 0;
+end intrinsic;
+
+/////////////////////////
+intrinsic is_curved_halfspace(pol::HypPol)->BoolElt
+/////////////////////////
+{Returns true if the polyhedron is a curved halfspace.}
+    return is_curved(pol) and is_halfspace(pol);
+end intrinsic;
+
+/////////////////////////
+intrinsic is_flat_halfspace(pol::HypPol)->BoolElt
+/////////////////////////
+{Returns true if the polyhedron is a flat halfspace.}
+    return is_flat(pol) and is_halfspace(pol);
+end intrinsic;
+
+/////////////////////////
+intrinsic halfspaces(pol::HypPol)->SetEnum[HypPol]
+/////////////////////////
+{}
+    return curved_halfspaces(pol) join flat_halfspaces(pol);
+end intrinsic;
+
+/////////////////////////
+intrinsic polyhedron(H::SpcHypCliff,pol0::TorPol)->HypPol
+/////////////////////////
+{Create a hyperbolic polyhedron from a TorPol.}
+    require dimension(H) eq 1+Dimension(Ambient(pol0)): "dim(pol) + 1 eq dim(H) fails.";
+    pol:=New(HypPol);
+    AN:=affine_space(H);
+    flat_halfspaces:=[];
+    inequalities:=Inequalities(pol0);
+
+    for inequality in inequalities do
+        coeffs:=Eltseq(inequality[1]);
+        intercept:=inequality[2];
+        eqn:=&+[coeffs[i]*AN.i : i in [1..#coeffs]]-intercept;
+        Append(~flat_halfspaces,<eqn,1>);
+    end for;
+    
+    pol`curved_halfspaces:={};
+    pol`flat_halfspaces:={x : x in flat_halfspaces};
+    pol`hyperbolic_space:=H;
+    return pol;
+end intrinsic;
+
+/////////////////////////
+intrinsic 'eq'(pol1::HypPol,pol2::HypPol)->BoolElt
+/////////////////////////
+{Checks equality of halfspaces. This intrinsic won't work properly unless there are no redundant halfspaces in the set of halfspaces defining the equation.}
+    if is_halfspace(pol1) and is_halfspace(pol2) then
+        return sign(pol1)*equation(pol1) eq sign(pol2)*equation(pol2);
+    else
+        return (pol1 subset pol2) and (pol2 subset pol1);
+    end if;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic Print(P::HypPol)
+/////////////////////////
+{Print statement for a convex polyhedron in hyperbolic space.}
+    //-----
+    function halfspace_string(P)
+    //-----
+        if sign(P) eq -1 then
+            return Sprintf("%o <= 0",equation(P));
+        elif sign(P) eq 1 then
+            return Sprintf("%o >= 0",equation(P));
+        end if;
+    end function;
+    
+    if is_halfspace(P) then
+        printf "Hyperbolic halfspace defined by " cat halfspace_string(P);
+    else
+        out:=[halfspace_string(H) cat "\n":H in halfspaces(P)];
+        printf "Hyperbolic convex polyhedron defined by " cat &cat(out);
+    end if;
+
+end intrinsic;
+
+/////////////////////////
+intrinsic scheme(P::HypPol)->RngIntElt
+/////////////////////////
+{For all halfspaces take the union of the defining hyperplanes.}
+    HN:=hyperbolic_space(P);
+    AN:=affine_space(HN);
+    
+    halfs:=halfspaces(P);
+    hyperplane_halfs:={@ h : h in halfs | flip(h) in halfs @};
+    
+    my_scheme:=(&join[Scheme(AN,equation(h)) meet ambient_linear_scheme(P) : h in halfspaces(P) | not h in hyperplane_halfs]);
+    assert AmbientSpace(my_scheme) eq AN;
+    return my_scheme;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic dimension(P::HypPol)->RngIntElt
+/////////////////////////
+{Return the dimension of a convex polyhedron.}
+    return Dimension(ambient_linear_scheme(P));
+end intrinsic;
+
+
+
+//This is the intersection of the halfspaces except we remove any halfspace that is contained in any other halfspace. This begs the question: given a set of halfspaces, what is a normal form for the set of equations?
+
+/////////////////////////
+intrinsic 'meet'(P1::HypPol,P2::HypPol)->HypPol
+/////////////////////////
+{TEMPORARY! NEEDS TO BE FIXED.}
+    H1:=hyperbolic_space(P1);
+    H2:=hyperbolic_space(P2);
+    require H1 eq H2: "The polyhedra must be in the same hyperbolic space";
+    
+    H:=H1;
+    
+    P3:=New(HypPol);
+    P3`hyperbolic_space:=H;
+    P3`flat_halfspaces:=P1`flat_halfspaces join P2`flat_halfspaces;
+    P3`curved_halfspaces:=P1`curved_halfspaces join P2`curved_halfspaces;
+    return P3;
+    
+    /*
+    if is_flat(P1) and is_flat(P2) then
+        p1:=projection(P1);
+        p2:=projection(P2);
+        return polyhedron(H,p1 meet p2);
+    elif is_flat(P1) and is_curved(P2) then
+    
+    //For each curved halfspace and flat halfspace we need to test if the curved halfspace is contained in the flat halfspace.
+    
+    //We find the vector q such that q+center is in the plane.
+    //If the radius is less or equal to the norm of q and the center is in the halfspace then we don't need the curved halfspace.
+    
+    //If the radius is less than the norm of q and the center is not in the half space then the intersection is empty.
+    
+    //If the radius is equal to to the norm of q then the intersection is a single point.
+    
+    
+        P3:=New(HypPol);
+        P3`hyperbolic_space:=H;
+        P3`flat_halfspaces:=P1`flat_halfspaces;
+        P3`curved_halfspaces:=P2`curved_halfspaces;
+        return P3;
+    elif is_curved(P1) and is_flat(P1) then
+        return P2 meet P1;
+    elif is_curved(P1) and is_curved(P2) then
+        //We need to test if one is contained in another.
+        P3:=New(HypPol);
+        P3`hyperbolic_space:=H;
+        P3`flat_halfspaces:={};
+        P3`curved_halfspaces:=P2`curved_halfspaces join P1`curved_halfspaces;
+        return P3;
+    else
+        C1s:=curved_halfspaces(P1);
+        C2s:=curved_halfspaces(P2);
+        H1s:=flat_halfspaces(P1);
+        H2s:=flat_halfspaces(P2);
+        Cs:=C1s join C2s;
+        Hs:=H1s join H2s;
+        C:=&meet(Cs);
+        H:=&meet(Hs);
+        return C meet H;
+        
+    end if;
+    */
+    
+end intrinsic;
+
+
+/////////////////////////
+intrinsic equation(P::HypPol)->RngMPol
+/////////////////////////
+{Equations are always normalized so the leading coefficient is 1.}
+    require is_halfspace(P): "Only hyperplanes have a single equation";
+    H:=hyperbolic_space(P);
+    AN:=affine_space(H);
+    if #P`curved_halfspaces gt 0 then
+        return CoordinateRing(AN)!Rep(P`curved_halfspaces)[1];
+    else
+        return CoordinateRing(AN)!Rep(P`flat_halfspaces)[1];
+    end if;
+end intrinsic;
+
+/////////////////////////
+intrinsic sign(H::HypPol)->RngIntElt
+/////////////////////////
+{Return the sign of a halfspace which can only be plus or minus 1.
+If it is +1 and the equation is eqn (always normalized so the leading coefficient is 1) then the halfspace is defined by eqn \geq 0. If the sign is -1 then the halfspace is defined by eqn \leq 0.
+}
+    require is_halfspace(H): "only halfspaces have signs";
+    return Rep(H`curved_halfspaces join H`flat_halfspaces)[2];
+end intrinsic;
+
+/////////////////////////
+intrinsic 'in'(pt::SpcHypCliffElt,P::HypPol)->BoolElt
+/////////////////////////
+{}
+    if is_full(P) then
+        return true;
+    elif is_halfspace(P) then
+        if is_infinite(pt) then
+            if is_flat(P) then
+                return true;
+            else
+                return (sign(P) ne -1);
+                /*if sign(P) eq -1 then
+                    return false;
+                else
+                    return true;
+                end if;*/
+            end if;
+        else
+            AN:=affine_space(Parent(pt));
+            seq:=Eltseq(pt);
+            eqn:=equation(P);
+            sgn:=sign(P);
+            // AML: I coerced this to Q, because Magma thinks all comparisons
+            // of elements of Qbar are true, resulting in nonsense.
+            // If we want to work over a general totally real field this will
+            // have to be changed.
+            val := Q!Evaluate(eqn,seq);
+            return (val*sgn) ge 0;
+        end if;
+    else
+        return forall{ H : H in halfspaces(P) | pt in H};
+    end if;
+end intrinsic;
+
+
+// AML: I don't understand what operation this is supposed to be.
+// If I apply it to an ideal triangle with vertices -1, 0, 1, I get the
+// empty polyhedron, for example?
+
+// TAD: I've really only been applying it to halfspaces. Yes, that is what till happen in this case.
+
+/////////////////////////
+intrinsic flip(P::HypPol)->HypPol
+/////////////////////////
+{change the inequality in each hyperplane}
+    P1:=New(HypPol);
+    P1`hyperbolic_space:=hyperbolic_space(P);
+    P1`curved_halfspaces:={ <x[1],-x[2]> : x in P`curved_halfspaces};
+    P1`flat_halfspaces:={ <x[1],-x[2]> : x in P`flat_halfspaces};
+    return P1;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic projection(pol::HypPol)->TorPol
+/////////////////////////
+{Given a flat hyperbolic polyhedron project the polyhedron onto the boundary to get a TorPol.}
+    require is_flat(pol): "Can only project a flat polyhedron";
+    H:=hyperbolic_space(pol);
+    AN:=affine_space(H);
+    rows:=[];
+    intercepts:=[];
+
+    for flat in pol`flat_halfspaces do
+        eqn:=flat[1];
+        sgn:=flat[2];
+        zeros:=[0: i in [1..dimension(H)]];
+
+        coeffs:=[Evaluate(Derivative(eqn,AN.i),zeros) : i in [1..dimension(H)-1]];
+        intercept:=Evaluate(eqn,zeros);
+
+        if sgn eq 1 then
+            aa:=coeffs; bb:=-intercept;
+        elif sgn eq -1 then
+            aa:=[-c : c in coeffs]; bb:=intercept;
+        end if;
+
+        Append(~rows,aa);
+        Append(~intercepts,bb);
+    end for;
+
+    return &meet([HalfspaceToPolyhedron(rows[i],intercepts[i]) : i in [1..#rows]]);
+
+end intrinsic;
+
+
+/////////////////////////
+intrinsic normal_and_intercept(pol::HypPol)->SeqEnum,.
+/////////////////////////
+{Given a flat hyperbolic halfspace get the normal vector of the hyperplane and the intercept}
+    
+    require is_flat(pol) and is_halfspace(pol): "pol is not a flat halfspace";
+    eqn:=Equation(scheme(pol));
+    return normal_and_intercept(eqn);
+end intrinsic;
+
+/////////////////////////
+intrinsic normal_and_intercept(plane::Sch)->SeqEnum,.
+/////////////////////////
+{Given a hyperplane of the hyperplane and the intercept}
+    require Degree(plane) eq 1 : "The equation must be a plane in affine space";
+    eqn:=Equation(plane);
+    return normal_and_intercept(eqn);
+end intrinsic;
+
+/////////////////////////
+intrinsic normal_and_intercept(eqn::RngMPolElt)->SeqEnum,.
+/////////////////////////
+{Given the equation of a plane return the normal vector (a1,...,an) and the intercept b such that the plane is given by a1*x1+...+an*xn=b.}
+    require Degree(eqn) eq 1: "Must be a hyperplane.";
+    R:=Parent(eqn);
+    nn:=Ngens(R);
+    zeros:=[R!0: i in [1..nn]];
+    coeffs:=[Evaluate(Derivative(eqn,R.i),zeros) : i in [1..nn]];
+    intercept:=Evaluate(eqn,zeros);
+    return coeffs,intercept;
+end intrinsic;
+
+
+/////////////////////////
+intrinsic nearest_point(pt::Pt,plane::Sch)->Pt
+/////////////////////////
+{Given a plane in affine space over a field contained in the reals and a point in affine space return the point in the plane closes to the given point.
+If n is the normal vector we have p+((p-p dot n)/|n|^2) n is the nearest point.
+}
+    require Degree(plane) eq 1: "Nearest point is only implemented for planes over the reals.";
+    AN:=Ambient(plane);
+    require pt in AN: "The point and the plane must be in the same ambient affine space.";
+    normal,intercept:=normal_and_intercept(plane);
+    p_dot_n:=&+[normal[i]*pt[i] : i in [1..Dimension(AN)]];
+    n_sq:=&+[normal[i]*normal[i] : i in [1..Dimension(AN)]];
+    lambda:=(-intercept-p_dot_n)/n_sq;
+    pt2:=AN![pt[i]+lambda*normal[i] : i in [1..Dimension(AN)]];
+    assert pt2 in plane;
+    return pt2;
+end intrinsic;
+
+/////////////////////////
+intrinsic distance_squared(p1::Pt,q1::Pt)->FldRatElt
+/////////////////////////
+{Return the Euclidean distance squared between two points in affine space.}
+    assert Parent(p1) eq Parent(q1);
+    N:=#Eltseq(p1);
+    return &+[(p1[i]-q1[i])^2 : i in [1..N]];
+end intrinsic;
+
+
+/////////////////////////
+intrinsic 'subset'(P1::HypPol,P2::HypPol)->BoolElt
+/////////////////////////
+{}
+
+/*
+
+Thoughts:
+We have that P1 is a subset of P2 if and only if P1 is contained in every halfspace of P2, so we can reduce the problem to containment of a general convex polytope into halfspaces.
+If P1 is a polytope, then we can just check membership of each of the vertices.
+
+If P1 is a curved halfspace and P2 is a curved halfspace then we can check the circles in the plane.
+If P1 is a curved halfspace and P2 is a flat halfspace then we can check that half-space and the sphere in the plane.
+If P1 is a flat halfspace and P2 is a curved halfspace then NO.
+If P1 is a flat halfspace and P2 is a flat halfspace then this reduces to a containment of the convex polyhedra in the plane.
+
+I think this is best handled by a linear programing problem.
+*/
+  
+    H:=hyperbolic_space(P1);
+    AN:=affine_space(H);
+    
+    if is_flat_halfspace(P1) and is_curved_halfspace(P2) then
+        sgn1:=sign(P1);
+        sng2:=sign(P2);
+        if sng2 eq -1 then
+            return false; //bounded by sphere
+        else
+            //unbounded region of sphere
+            cen2,rad_sq2:=center_and_radius_squared(P2);
+            plane1:=scheme(P1);
+            dist_sq:=distance_squared(cen2,plane1);
+            if dist_sq gt rad_sq2 then
+                return (not cen2 in P1);
+            else
+                return false;
+            end if;
+        end if;
+    elif is_flat(P1) and is_flat(P2) then
+        return projection(P1) subset projection(P2);
+    //elif is_curved_halfspace(P1) and is_curved_halfspace(P2) then
+        //This is where we need to use Adam's the MLP thing.
+    elif is_curved_halfspace(P1) and is_flat_halfspace(P2) then
+        sgn1:=sign(P1);
+        sng2:=sign(P2);
+    
+        if sgn1 eq 1 then
+            return false; //unbounded region for sphere
+        else
+            cen,rad:=center_and_radius_squared(P1);
+            plane2:=scheme(P2);
+            n2,b2:=normal_and_intercept(P2);
+            
+            if dist_sq(cen,plane2) gt rad^2 then
+                return (cen in P2);
+            else
+                return true;
+            end if;
+            
+        end if;
+    else
+        //assumes it can be made into a polytope
+        return polytope(P1) subset P2;
+    end if;
+end intrinsic;
+
+
+
+
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+//  POLYTOPES
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+
+/*
+    A lot of this is not completed and I have been working with polyhedra.
+    -Taylor, June 2025
+
+*/
+
+/*
+Ratcliffe section 4.6, Theorem 4.6.3
+
+Hyperbolic m-planes:
+--Euclidean m-spheres orthogonal to the boundary
+--Euclidean m-planes orthogonal to the boundary
+*/
+
+/*
+Hyperbolic lines
+--vertical lines
+--circle orthogonal to boundary
+*/
+
+/*
+intrinsic geodesic(p::HypSpcCliffElt,q::HypSpcCliffElt)->HypPol
+{}
+    H:=Parent(p);
+    require H eq Parent(q): "The two elements must be in the same hyperbolic space";
+    
+    //find the flat polyhedron containing both
+    p1:=project(p);
+    q1:=project(q);
+    
+    //if p1 eq q1 then we have a vertical line
+    
+    AN:=affine_space(H);
+    
+    pol0:=Polytope([p1,q1]);
+    pol0_h:=polyhedron(H,pol0);
+    
+    //find the bubble containing both
+    C:=cusps(H);
+    p1v:=Vector(p1);
+    q1v:=Vector(p2);
+    half:=(q1v-p1v)/2;
+    
+    //intersect the bubble with the flat polyhedron
+    return pol1_h meet pol0_h;
+    
+end intrinsic;
+*/
+
+/////////////////////////
+intrinsic vertices(pol::HypPolt)->SetEnum[SpcHypCliffElt]
+/////////////////////////
+{Return the vertices of the underlying hyperbolic space.}
+    return pol`vertices;
+end intrinsic;
+
+/////////////////////////
+intrinsic hyperbolic_space(pol::HypPolt)->SpcHypCliff
+/////////////////////////
+{Return the underlying compactified hyperbolic space of a convex hyperbolic polytope.}
+    return pol`hyperbolic_space;
+end intrinsic;
+
+/////////////////////////
+intrinsic scheme(pol::HypPolt)->Sch
+/////////////////////////
+{Return the scheme associated to a convex hyperbolic polytope.}
+    return pol`scheme;
+end intrinsic;
+
+/////////////////////////
+intrinsic Print(polt::HypPolt)
+/////////////////////////
+{Print statement for convex hyperbolic polytopes}
+    printf "Convex hyperbolic polytope of dimension %o. Convex hull of %o.", dimension(polt),vertices(polt); //[real_algebraic_point(v) : v in vertices(polt)];
+end intrinsic;
+
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+//  Subset/Meet Convex Optimization
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+
+/////////////////////////
+intrinsic SOCP_max(constraints::SeqEnum[Tup],target::Tup : filename:="temp.txt")->RngIntElt,.,.
+/////////////////////////
+{
+Maximize:\n
+|At x + bt|_2 - (ct^T*x + dt)\n\n
+
+Subject to:\n
+|A_i x +b_i|_2 \leq c_i^T*x+d_i, for i=1,...,m\n
+Fx=g.\n\n
+
+where\n \n
+
+x in RR^n,\n
+f in RR^n,\n
+A_i in n_i x n\n
+b_i in RR^n_i \n
+c_i in RR^n \n
+d_i in RR \n \n
+
+    --constraint: A sequence of <Ai,bi,ci,di> \n
+    --target: <At,bt,ct,dt> \n \n
+}
+    
+    /*
+    We create a text file which instantiates
+    --A,b,c,d, python lists
+    --ni, python list
+    --m, int, length of constraints
+    --n, int, length of x
+    --At,bt,ct,dt list of lists, list, list, element
+    */
+    
+    At:=target[1];
+    bt:=target[2];
+    ct:=target[3];
+    dt:=target[4];
+    
+    m:=#constraints;
+    n:=Ncols(At);
+    nis:=[];
+    
+    file := Open(filename,"w");
+    
+    //record the target information and m and n
+    str := Sprintf(
+    "
+    m=%o\n
+    n=%o\n
+    At=%o\n
+    bt=%o\n
+    ct=%o\n
+    dt=%o\n
+    ", m,n,At,bt,ct,dt);
+    Write(file,str);
+    
+    
+    //record the constraints
+    for con in constraints do
+        A := con[1];
+        b := con[2];
+        c := con[3];
+        d := con[4];
+        str := Sprintf(
+            "
+            A.append(%o)\n
+            b.append(%o)\n
+            c.append(%o)\n
+            d.append(%o)\n
+            ", A,b,c,d);
+        Write(file,str);
+        
+        Append(~nis,#Eltseq(b));
+    end for;
+    
+    //record the nis
+    str := Sprintf(
+    "
+    ni=%o
+    ", nis);
+    Write(file,str);
+    
+    delete file;
+    
+    ans,value_raw,x_raw := System("python optimize.py" cat " " cat filename); //I removed div 256
+    
+    if ans eq 0 then
+        return 0;
+    else
+        return 1, value_raw,x_raw;
+    end if;
+    
+end intrinsic;
+
+
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+//  SL2 ACTION
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+
+
+intrinsic '*'(g::AlgMatElt,P::HypPol)->HypPol
+{Given a matrix of Clifford algebra elements act on a hyperbolic polyhedron by a fractional linear transformation.}
+    H:=hyperbolic_space(P);
+    g_alg,rationals:=map_of_affine_space(H,g^-1);
+    
+    /*
+    Do it for halfspaces then if it isn't a halfspace take the intersection of the moved halfspaces.
+    */
+    
+    if is_halfspace(P) then
+        sgn:=sign(P);
+        /*
+        We had to compose the equations "by hand" to get the right behavior here.
+        There is a sticky point dealing with the sign of equations defining schemes since we are dealing with inequalities.
+        */
+        eqn:=Numerator(Evaluate(equation(P),rationals));
+        d:=Degree(eqn);
+        if d eq 1 then
+            return flat_halfspace(H,eqn,sgn);
+        elif d eq 2 then
+            return curved_halfspace(H,eqn,sgn);
+        else
+            error "invalid equation: must have degree 1 or 2";
+        end if;
+    else
+        halfs:=halfspaces(P);
+        return &meet[g*h : h in halfs];
+    end if;
+    
+end intrinsic;
+
+
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+//  POLYHEDRAL COMPLEXES
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+
+
+intrinsic polyhedral_complex(pols::SetEnum[HypPol])->PolComp
+{Given a set of hyperbolic polyhedra, create a polyhedral complex}
+/*
+Some testing needs to be added here at the top level. Polyhedra can only intersect at faces (of any codimension).
+*/
+    pol_comp:=New(PolComp);
+    pol_comp`ambient:=hyperbolic_space(Rep(pols));
+    pol_comp`polyhedra:=pols;
+    pol_comp`faces:=AssociativeArray();
+    return pol_comp;
+end intrinsic;
+
+intrinsic polyhedra(pol_comp::PolComp)->SetEnum
+{Return the underlying polyhedra of a polyhedral complex}
+    return pol_comp`polyhedra;
+end intrinsic;
+
+intrinsic dimension(pol_comp::PolComp)->RngIntElt
+{Return the dimension of a polyhedral complex}
+    pol:=Rep(polyhedra(pol_comp));
+    return dimension(pol);
+end intrinsic;
+
+/*
+intrinsic faces(pol_comp::PolComp,i::RngIntElt)->SetEnum
+{Return the faces  of a polyhedral complex.}
+    if i notin Keys(pol_comp`faces) then
+        if i eq 1 then
+            codim1 := {*x: x in &cat [faces(f,1): f in pol_comp`polyhedra]*};
+            outer_facets := {@x: x in codim1|Multiplicity(facets,x) eq 1@};
+            pol_comp`faces[i]:=outer_facets;
+        else
+            faces_above:=faces(pol_comp,i-1);
+            pol_comp`faces[i]:={ f1 meet f2 : f1 in faces_above, f2 in faces_above | dimension(f1 meet f2) eq i };
+        end if;
+    end if;
+    
+    return pol_comp`faces[i];
+    
+end intrinsic;
+*/
+
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+//  Vertices/Clusters/Pruning
+////////////////////////////////////////
+////////////////////////////////////////
+////////////////////////////////////////
+
+intrinsic ambient_linear_polyhedron(pol::HypPol)->HypPol
+{Find the linear space containing the polyhedron.}
+    halfs:=halfspaces(pol);
+    linear_halfs:=[h : h in halfs | flip(h) in halfs];
+    if #linear_halfs eq 0 then
+        return polyhedron(hyperbolic_space(pol));
+    else
+        return &meet(linear_halfs);
+    end if;
+end intrinsic;
+
+intrinsic ambient_linear_scheme(pol::HypPol)->Sch
+{Find the minimal linear space containing the scheme of a polyhedron. The scheme of a polyhedron is the union of its sides.}
+    hyperplane_pairs:={@ {h,flip(h)} : h in halfspaces(pol) | flip(h) in halfspaces(pol) @};
+    if #hyperplane_pairs eq 0 then
+        return affine_space(hyperbolic_space(pol));
+    else
+        hyperplanes:=[ scheme(Rep(pair)) : pair in hyperplane_pairs  ];
+        minimal_linear_subspace:=&meet(hyperplanes);
+        return minimal_linear_subspace;
+    end if;
+end intrinsic;
+
+
+
+intrinsic cluster(pol::HypPol)->Sch
+{Given a hyperbolic polyhedron determine the zero dimensional scheme that is its set of points.}
+    H:=hyperbolic_space(pol);
+    n:=dimension(H);
+    halfs:=Setseq(halfspaces(pol));
+
+    subs := [[halfs[i]: i in s]: s in Subsets({1..#halfs},n)];
+    //  subs:=Subsets(halfspaces(pol),n);
+    clusters:=[];
+    for sub in subs do
+        X:=(&meet[scheme(x) : x in sub]);
+        if Dimension(X) eq 0 then
+            Append(~clusters,X);
+        end if;
+    end for;
+    
+    if #clusters eq 0 then
+        AN:=affine_space(H);
+        return EmptyScheme(AN);
+    else
+        return &join clusters;
+    end if;
+end intrinsic;
+
+
+intrinsic vertices(pol::HypPol)->SeqEnum[HypSpcCliffElt],SeqEnumPt
+{
+Returns the vertices of a hyperbolic polyhedron. The second sequence returns their real values as points of affine space. This can be used for testing inequalities.
+There are at most two real embeddings of every point.
+We understand our algebraic one to mean the one that is in the upper half space.
+We can coerce these into points of hyperbolic space so we return them as such.
+We also test to make sure the points are genuinely points of the polyhedron.
+}
+    if not assigned pol`vertices then
+        H:=hyperbolic_space(pol);
+        AN:=affine_space(H);
+        n:=dimension(H);
+        X:=cluster(pol) meet ambient_linear_scheme(pol);
+        
+        if not IsEmpty(X) then
+            pts:=RationalPoints(X,Qbar);
+            real_value:=AssociativeArray();
+            for pt in pts do
+                seq:=Eltseq(pt);
+                y:=seq[n];
+                my:=MinimalPolynomial(y);
+                if Degree(my) gt 1 then
+                    assert Degree(my) eq 2;
+                    F<a>:=SplittingField(my);
+                    y_coord:=[ x : x in RealEmbeddings(a) | x ge 0];
+                    if #y_coord gt 0 then
+                        assert #y_coord eq 1;
+                        real_value[pt]:=AN(RR)!([RR!x: x in seq[1..n-1]] cat [y_coord[1]]);
+                    end if;
+                elif Q!y gt 0 then
+                    //they can always be made rational so the test above works
+                    real_value[pt]:=AN(RR)!seq;
+                end if;
+            end for;
+            //printf "finished main loop...\n";
+
+            
+            bogus_points:=[ x : x in pts | not x in Keys(real_value)];
+            verts:={@ @};
+            key_list:=[k: k in Keys(real_value)];
+            
+            for k in key_list do
+                //printf "converting %o...\n",k;
+                v:=H!Eltseq(k);
+                v`algebraic_point:=k;
+                v`real_algebraic_point:=real_value[k];
+                verts:=verts join {@ v @};
+            end for;
+            
+            //Test that the points are genuine;
+            //printf "testing membership...\n";
+            verts:=[ v : v in verts | v in pol];
+            
+            //this tests to see if a vertex is actually necessary by seeing it is contained in a defining hyperplane
+            verts_good:=[];
+            for v in verts do
+                if exists{ h : h in halfspaces(pol) | algebraic_point(v) in scheme(pol) } then
+                    Append(~verts_good,v);
+                end if;
+            end for;
+                    
+            
+            infty:=infinity(H);
+            if infinity(H) in pol then
+                verts_good:=verts_good cat [infty];
+            end if;
+            
+            pol`vertices:=verts_good;
+            return verts_good,bogus_points;
+        else
+            pol`vertices:=[];
+        end if;
+    end if;
+        
+        return pol`vertices;
+    
+end intrinsic;
+
+intrinsic prune(pol::HypPol)->HypPol
+{Remove the excess halfspaces from a polyhedron given that it bounds a polytope.
+It does this by making sure that every bound plane contains at least one vertex.}
+    verts:=vertices(pol);
+    H:=hyperbolic_space(pol);
+    
+    if #verts gt 0 then
+    //we currently only have an algorithm if the polyhedron is a polytope
+        infty:=infinity(H);
+        verts_finite:=[ v : v in verts | not is_infinite(v)];
+
+        verts_of_sides:=AssociativeArray();
+        halfs:={@ h: h in halfspaces(pol) @};
+        infty:=infinity(H);
+
+        for h in halfs do
+            verts_of_sides[h]:=[];
+            verts_of_sides[h]:=[ v : v in verts_finite| algebraic_point(v) in scheme(h)];
+        end for;
+        
+        halfs_new:=[h: h in halfs|#verts_of_sides[h] gt 0];
+        if #halfs_new gt 0 then
+            pol_new:=&meet[h: h in halfs_new];
+            pol_new`vertices:=verts;
+            
+            pol`vertices:=pol_new`vertices;
+            pol`curved_halfspaces:=pol_new`curved_halfspaces;
+            pol`flat_halfspaces:=pol_new`flat_halfspaces;
+            return pol_new;
+        else
+            pol_new:=empty_polyhedron(H);
+            pol:=pol_new;
+            return pol_new;
+        end if;
+    else
+            return pol;
+    end if;
+end intrinsic;
+
+intrinsic polytope(pol::HypPol)->HypPolt
+{Return the polytope of the hyperbolic polyhedron when possible. This is the convex hull of a finite set of points in Satake compactified hyperbolic space.}
+    if not assigned pol`polytope then
+        pol_new:=prune(pol);
+        polt:=New(HypPolt);
+        polt`hyperbolic_space:=hyperbolic_space(pol_new);
+        polt`vertices:=vertices(pol_new);
+        polt`scheme:=scheme(pol_new);
+        pol`polytope:=polt;
+        polt`polyhedron:=pol_new;
+    end if;
+        return pol`polytope;
+end intrinsic;
+
+intrinsic dimension(polt::HypPolt)->RngIntElt
+{Returns the dimension of a hyperbolic polytope. It is the dimension of the underlying scheme plus one.}
+    return Dimension(scheme(polt))+1;
+end intrinsic;
+
+intrinsic polyhedron(polt::HypPolt : bound:=10^-10)->HypPol
+{Return the underlying polyhedron of a polytope. The function checks inequalities numerically. The bound is the accuracy that we check these inequalities to.
+The algorithm proceeds by taking the geodesic hyperplanes defining the underlying scheme of the polytope.
+For each of these hyperplanes we plug in all of the points.
+If it is zero everywhere we know the polyhedron is contained in that hyperplane.
+If they are all positive we make the appropriate inequality for the associated halfspace.
+If they are all negative we make the appropriate inequality for the associated halfspace.
+}
+    if not assigned polt`polyhedron then
+        verts:=vertices(polt);
+        H:=Parent(verts[1]);
+        pts:=[real_algebraic_point(v) : v in verts];
+        irreds:=IrreducibleComponents(scheme(polt));
+        eqn_seq:=&cat[ Equations(X) : X in irreds];
+        eqns:={@ eqn : eqn in eqn_seq @};
+
+        hyperplanes:=[];
+        positive:=[];
+        negative:=[];
+        lower:=-bound;
+        upper:=bound;
+
+        for eqn in eqns do
+            values:=[Evaluate(eqn,pt) : pt in pts ];
+            if &and[v lt upper and v gt lower : v in values] then
+                Append(~hyperplanes,eqn);
+            elif &and[v lt upper : v in values] then
+                Append(~negative,eqn);
+            elif &and[v gt lower : v in values] then
+                Append(~positive,eqn);
+            end if;
+        end for;
+
+        //check that we didn't miss anything by doing these numerical computations.
+        assert [eqn : eqn in eqns] eq (hyperplanes cat negative cat positive);
+
+        hs:=[];
+
+        for eqn in hyperplanes do
+            hs:=hs cat [halfspace(H,eqn,-1),halfspace(H,eqn,1)];
+        end for;
+
+        for eqn in positive do
+            Append(~hs,halfspace(H,eqn,1));
+        end for;
+
+        for eqn in negative do
+            Append(~hs,halfspace(H,eqn,-1));
+        end for;
+
+        pol:=&meet(hs);
+        polt`polyhedron:=pol;
+    end if;
+        
+    return polt`polyhedron;
+end intrinsic;
+
+intrinsic 'in'(x::SpcHypCliffElt,polt::HypPolt)->BoolElt
+{Determine if a point in hyperbolic space is a member of a polytope.}
+    pol:=polyhedron(polt);
+    return x in pol;
+    
+end intrinsic;
+
+intrinsic 'subset'(polt1::HypPolt,pol2::HypPol)->BoolElt
+{Determine if a polytope is a subset of a polyhedron}
+    // return forall{v: v in pol2|v in vertices(polt1)};
+    // AML: it used to be as above--am I right that this doesn't make sense?
+    return forall{v: v in vertices(polt1)|v in pol2};
+end intrinsic;
+
+intrinsic 'subset'(polt1::HypPolt,polt2::HypPolt)->BoolElt
+{Determine if a polytope is contained in another polytope.}
+    return forall{v: v in vertices(polt1)|v in polt2};
+end intrinsic;
+
+intrinsic 'eq'(polt1::HypPolt,polt2::HypPolt)->BoolElt
+{Determine if two polytopes are equal}
+    return (polt1 subset polt2) and (polt2 subset polt1);
+    
+end intrinsic;
+
+intrinsic facets(pol::HypPol)->SeqEnum[HypPol]
+{Return the facets of a hyperbolic polyhedron.}
+    return faces(pol,1);
+end intrinsic;
+
+
+intrinsic faces(pol::HypPol,n::RngIntElt)->SeqEnum[HypPol]
+{Return the codimension n polyhedra which are faces of the given polyhedra.}
+    assert n ge 1;
+    
+    if not assigned pol`faces then
+        pol`faces:=AssociativeArray();
+    end if;
+    
+    if not n in Keys(pol`faces) then
+        if n eq 1 then
+            amb:=ambient_linear_polyhedron(pol);
+            sides:={(h meet flip(h)) : h in halfspaces(pol)};
+            fs:={pol meet side : side in sides};
+            fs:=[ f : f in fs | dimension(f) eq dimension(pol)-1];
+            pol`faces[n]:=fs;
+        else
+            fs := {};
+            for f1 in faces(pol,n-1) do
+                fs:=fs join {f2: f2 in faces(f1,1)};
+            end for;
+            output:=[f : f in fs];
+            assert &and[dimension(f) eq dimension(pol)-n : f in output];
+            pol`faces[n]:=output;
+        end if;
+    end if;
+    
+    return pol`faces[n];
+end intrinsic;
+
+intrinsic facets(polt::HypPolt)->SeqEnum[HypPolt]
+{return the codimension 1 faces of a polytope. This is much faster than working with polyhedra.}
+    if not assigned polt`faces then
+        polt`faces:=AssociativeArray();
+    end if;
+    
+    if not 1 in Keys(polt`faces) then
+        H:=hyperbolic_space(polt);
+        irreds:=IrreducibleComponents(scheme(polt));
+        verts:=[v : v in vertices(polt) | not is_infinite(v)];
+        pts:=[algebraic_point(v) : v in verts];
+        fs:=[];
+        for X in irreds do
+            Z:=&join[Y : Y in irreds | Y ne X];
+            sch:=Z meet X;
+            verts:=[H!Eltseq(p) : p in pts | p in sch];
+            polt0:=New(HypPolt);
+            polt0`hyperbolic_space:=H;
+            polt0`scheme:=sch;
+            polt0`vertices:=verts;
+            Append(~fs,polt0);
+        end for;
+        polt`faces[1]:=fs;
+    end if;
+    
+    return polt`faces[1];
+
+end intrinsic;
+    
+intrinsic faces(polt::HypPolt,n::RngIntElt)->SeqEnum[HypPolt]
+{Compute the codimension n faces of a polytope. This intrinsic is faster than the one for polyhedra.}
+    if not assigned polt`faces then
+        polt`faces:=AssociativeArray();
+    end if;
+    
+    if n in Keys(polt`faces) then
+        return polt`faces[n];
+    elif n eq 1 then
+        polt`faces[1]:=facets(polt);
+        return polt`faces[1];
+    elif n gt 1 then
+        fs:=faces(polt,n-1);
+        fss:=&cat[facets(f) : f in fs];
+        fss_set:={@ e : e in fss@};
+        polt`faces[n]:=[f : f in fss_set];
+        return polt`faces[n];
+    end if;
+end intrinsic;
+
+/*
+TAD:I think we have duplicated some code here. There is algebraic_point and real_algebraic point in package-cusps.mag. We should consolidate these intrinsics. I have also been trying to keep intrinsics just involving cusps and points of hyperbolic space with package-cusps.
+*/
+
+function affine_point(cusp)
+  error if is_infinite(cusp), "no affine point corresponds to the cusp at infinity";
+  alg := cusp`parent`clifford_algebra;
+  inds := alg`vec_inds;
+  aff := affine_space(hyperbolic_space(cusp`parent));
+  pt := aff!Append([Eltseq(cusp)[i]: i in inds],0);
+  return pt;
+end function;
+                                               
+// AML: I am not sure about the conventions.  This probably assumes that
+// all of the imaginary units square to -1.
+// TAD: Yes, see line 1418. Also, I think with a little prunning of the vertices we can return a HypPolt since it is essentially a scheme with vertices. Also, I think this will work for SpcHypCliffElts more generally.
+
+////////////////////
+intrinsic geodesic(cusps::Setq[SetCspCliffElt]) -> Sch
+////////////////////
+{Given a set of cusps, find a geodesic of minimal dimension through them.}
+  cs := Universe(cusps);
+  require &and[a eq -1 : a in squares(Parent(Rep(cusps)))]: "Only implemented for squares being -1";
+  
+  hyp := hyperbolic_space(cs);
+  aff := affine_space(hyp);
+  if #cusps eq 0 then
+    return EmptySubscheme(aff);
+  end if;
+  d := Dimension(aff);
+  pts := [aff|Eltseq(affine_point(i)): i in cusps|i ne infinity(cs)];
+  ls1 := LinearSystem(aff,Append([aff.i: i in [1..d-1]],1));
+  for i in pts do
+    ls1 := LinearSystem(ls1,i);
+  end for;
+  lin := BaseScheme(ls1);
+  if infinity(cs) in cusps then
+    sch := lin;
+  else // we are looking for a hemisphere, so first we find its centre
+    dists := [&+[(aff.i-x[i])^2: i in [1..d]]: x in pts];
+    //TAD: This is where you are using the convention.
+    //I have been doing explicit computations with clifford algebras to avoid convention mistakes.
+    //See for example, the algebraic_map intrinsic in package-cusp.mag.
+    
+    same_dist := Scheme(aff,Append([d-dists[1]: d in dists],aff.d));
+    sl := same_dist meet lin;
+    if Dimension(sl) eq -1 then // IsEmpty seems not to work here
+      // in this case the points are linearly dependent, so the minimal
+      // geodesic subspace is vertical.
+      sch := lin;
+    else
+      assert Dimension(sl) eq 0 and Degree(sl) eq 1;
+      centre := RationalPoints(sl)[1];
+      radsq := Evaluate(dists[1],Eltseq(centre));
+      assert radsq gt 0;
+      sch := Scheme(lin,&+[(aff.i-centre[i])^2: i in [1..d]]-radsq);
+    end if;
+  end if;
+  assert forall{x: x in pts|x in sch};
+  return sch;
+end intrinsic;
+
+
+
+//TAD: I think we should rename this one 'in'.
+intrinsic cusp_in_pol(cusp::SetCspCliffElt,pol::HypPol) -> BoolElt
+{Given a cusp and a polyhedron, decide whether it is contained in the closure.}
+  if is_infinite(cusp) then
+    return forall{x: x in pol`curved_halfspaces|x[2] eq 1};
+  else
+    pt := affine_point(cusp);
+    return forall{x: x in pol`curved_halfspaces join pol`flat_halfspaces|Sign(Evaluate(x[1],Eltseq(pt)))*x[2] ne -1};
+  end if;
+end intrinsic;
+          
+intrinsic vertices_to_faces(cusps::Setq[SetCspCliffElt]) -> HypPol
+{Given a set of cusps, construct the facets of the polyhedron they span.}
+  cs := Universe(cusps);
+  if not assigned cs`hyperbolic_space then cs`hyperbolic_space := hyperbolic_space(cs`clifford_algebra); end if;
+  inf := cs!Infinity();
+  // everything is contained in this space
+  span := geodesic(cusps);
+  // and every facet has number of vertices equal to the dimension
+  ss := Setseq(Subsets(Set(cusps),Dimension(span)));
+  faces := [];
+  pol := New(HypPol);
+  pol`curved_halfspaces := {};
+  pol`flat_halfspaces := {};
+  pol`hyperbolic_space := cs`hyperbolic_space;
+  for s in ss do
+    face := geodesic(Setseq(s)); // sets of cusps cause problems with the hash
+    if Dimension(face) eq Dimension(span)-1 then
+      // which one shouldn't matter
+      neweq := rep{x: x in DefiningPolynomials(face)|x notin Ideal(span)};
+      signs := {@Sign(Evaluate(neweq,Eltseq(i))): i in cusps|i ne inf@};
+      if inf in cs and Degree(neweq) eq 2 then
+        Include(~signs,1);
+      end if;
+      if {@-1,1@} notsubset signs then
+        sign := rep{i: i in signs|i ne 0};
+        // we could also determine here which points are the vertices
+        // of which faces
+        if Degree(neweq) eq 2 then
+          Include(~pol`curved_halfspaces,<neweq,sign>);
+        else
+          Include(~pol`flat_halfspaces,<neweq,sign>);
+        end if;
+      end if;
+    end if;
+  end for;
+  return pol;
+end intrinsic;
+
+intrinsic Hash(polt::HypPolt)->RngIntElt
+{}
+    return Hash(vertices(polt));
+end intrinsic;

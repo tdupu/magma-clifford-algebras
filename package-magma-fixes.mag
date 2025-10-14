@@ -1,0 +1,371 @@
+/*
+This file is for functions which don't exist in magma but maybe should.
+
+TODO: Add the non-bugged relations algorithm.
+*/
+
+Z:=Integers();
+Q:=RationalField();
+
+/*
+intrinsic AbelianGeneratorLifts(G::GrpFP) -> SeqEnum[GrpFPElt], Map
+{Return lifts of the abelianization generators and the abelianization map.}
+    A, pi := AbelianQuotient(G);
+    n := Ngens(G);
+    Zfn := AbelianGroup([0 : j in [1..n]]);
+    psi := hom< Zfn -> A | [ pi(G.j) : j in [1..n] ] >;
+    lifts := [ &*[ G.j ^ Eltseq((A.k) @@ psi)[j] : j in [1..n] ] : k in [1..Ngens(A)] ];
+    return lifts, pi;
+end intrinsic;
+*/
+
+// the code above is correct, but falls into a Magma trap and is unduly slow.
+intrinsic AbelianGeneratorLifts(G::GrpFP) -> SeqEnum[GrpFPElt], Map
+{Return lifts of the abelianization generators and the abelianization map.}
+    A, pi := AbelianQuotient(G);
+    n := Ngens(G);
+    Zfn := AbelianGroup([0 : j in [1..n]]);
+    ims_gens := [pi(G.j): j in [1..n]];
+    im := sub<A|ims_gens>; // in this case always A
+    sub_so_far := sub<A|>;
+    keep_inds := [];
+    for i in [1..n] do
+      if ims_gens[i] notin sub_so_far then
+        sub_so_far := sub<A|sub_so_far,ims_gens[i]>;
+        Append(~keep_inds,i);
+      end if;
+      if sub_so_far eq im then break; end if;
+    end for;
+
+    Zk := FreeAbelianGroup(#keep_inds);
+    new_pi := hom<Zk->A|[ims_gens[i]: i in keep_inds]>;
+    Zk_to_Zfn := hom<Zk->Zfn|[Zfn.i: i in keep_inds]>;
+    lifts_zk := [(A.i)@@new_pi: i in [1..Ngens(A)]];
+    lifts_zfn := [Zk_to_Zfn(i): i in lifts_zk];
+    lifts := [&*[G.j^Eltseq(i)[j]: j in [1..n]]: i in lifts_zfn];
+    assert forall{i: i in [1..Ngens(A)]|pi(lifts[i]) eq A.i};
+    return lifts, pi;
+end intrinsic;
+    
+intrinsic TransferMap(G::GrpFP,H::GrpFP)->Map,GrpAb,Map,GrpAb,Map
+{
+Given finitely presented groups G and H with H finite index in G return the transfer map of the abelianizations. The output returns the morphism of abelian groups, the abelianization of G with the map from G to its abelianization, and the abelianization H with the map from H to its abelianization.
+}
+/*
+Let H subset G be a group of finite index in a finitely presented group. Let the index be n.
+We will construct a map G^{\ab} \to H^{\ab} called the transfer map. Fix a set left coset representatives (which are classes for the right action of H on G),
+    G = x_1 H \cup x_2 H \cup \cdots \cup x_n H
+Since Magma outputs only right coset representatives we note that if y_1,\ldots,y_n is a right transversal then y_1^{-1}, y_2^{-1},\ldots, y_n^{-1} is a left transversal.
+
+We now explain how a given y \in G transfers to some h in H. The recipe is this: we compute the left action on the left cosets (for the right action) to get
+    yx_i H \in x_{sigma(i)} H,
+hence y x_i = x_{sigma(i)} h_i for some h_i in H. The transfer map is then given by
+    Transfer(y) = h_1h_2...h_n.
+*/
+    G_ab,f_G:=AbelianQuotient(G);
+    H_ab,f_H:=AbelianQuotient(H);
+    
+    R,get_rep:=RightTransversal(G,H);
+    
+    /*
+    get_rep(x) is the element of the transversal such that Hx = Hr. Then x^{-1}H=r^{-1}H.
+    So the set of left transversals is {@ x^-1 : x in R @}. The left representative for x is then get_rep(x^-1)^(-1).
+    */
+
+    L:={@ x^-1 : x in R @};
+
+    function left_rep(x)
+        return get_rep(x^-1)^-1;
+    end function;
+    
+    function transfer(y)
+        hs:=[];
+        for x in L do
+            p:=y*x;
+            x_prime:=left_rep(p);
+            assert x_prime in L;
+            h:=x_prime^-1*p;
+            assert h in H;
+            assert y*x eq x_prime*h;
+            Append(~hs,h);
+        end for;
+
+        return &*hs;
+    end function;
+    
+    coord:=[f_H(H!transfer(g)) : g in AbelianGeneratorLifts(G)];
+    tr:=hom<G_ab->H_ab|coord>;
+    return tr,G_ab,f_G,H_ab,f_H;
+end intrinsic;
+
+
+intrinsic AbelianQuotient(phi::Map) -> Map, GrpAb, GrpAb, Map, Map
+{Given phi : G -> H (GrpFP), return phi_ab : G^ab -> H^ab and the projections.}
+    require ISA(Type(Domain(phi)), GrpFP) and ISA(Type(Codomain(phi)), GrpFP):
+        "phi must be a hom between GrpFP groups";
+    G := Domain(phi);  H := Codomain(phi);
+    A_G, piG := AbelianQuotient(G);
+    A_H, piH := AbelianQuotient(H);
+    ab_gens:=AbelianGeneratorLifts(G);
+    map_data:=[piH(phi(g)) : g in ab_gens];
+    phi_ab := hom< A_G -> A_H | map_data >;
+    return phi_ab, A_G, A_H, piG, piH;
+end intrinsic;
+
+
+/*
+
+COSET ENUMERATION
+
+*/
+
+// Function to work out a coset table for a group given implicitly, i.e.,
+// with a membership test but no set of generators, etc.
+
+//////////////////////////
+intrinsic coset_table(g::GrpFP,test::UserProgram: limit := Infinity()) -> SeqEnum[GrpPermElt], SeqEnum
+{Construct a coset table for a subgroup of a finitely-presented group defined by a membership-testing function.}
+//////////////////////////
+/*
+This is a custom coset table function. In principle Magma can do this.
+
+INPUT:
+--g, a finitely presented group.
+--test, a function which tests for membership of a subgroup
+
+OUTPUT:
+The output is the permutation representation of the coset representatives.
+
+*/
+  exp := 7-GetVerbose("Clifford");
+  transversal := [<g.0,[Z|]>];
+  rows := [[Z|]: i in [1..Ngens(g)]];
+  ct := 1;
+  while ct le #transversal and ct le limit do
+    ims := [transversal[ct,1]*g.i: i in [1..Ngens(g)]];
+    for i in [1..#ims] do
+      if exists(n){n: n in [1..#transversal]|test(ims[i]*transversal[n,1]^-1)} then
+        rows[i,ct] := n;
+      else
+        Append(~transversal,<ims[i],Append(transversal[ct,2],i)>);
+        rows[i,ct] := #transversal;
+      end if;
+    end for;
+    ct +:= 1;
+    if ct/10^exp in Z then
+      vprintf Clifford, 1: "%o", (ct div 10^exp) mod 10;
+    end if;
+  end while;
+
+  perms := [SymmetricGroup(#transversal)!i: i in rows];
+  return perms,transversal;
+end intrinsic;
+
+//////////////////////////
+intrinsic coset_table_matrices(g::GrpFP,test::UserProgram,g_to_mat::Assoc,cl::CliffAlg: limit := Infinity()) -> SeqEnum[GrpPermElt], SeqEnum
+{Construct a coset table for a subgroup of a finitely-presented group defined by a membership-testing function with a representation as a group of matrices over a Clifford algebra.}
+//////////////////////////
+/*
+
+// less general version that relies on having matrices to test
+// here g_to_mat is supposed to be the array psl`sl2quo_to_mat,
+// but it's easy to modify this to make it a function
+// or you could rewrite this to take the PSL2 object as an argument
+// instead of g and g_to_mat
+
+// this seems only marginally faster than the above if at all,
+// which surprised me
+
+*/
+  exp := 7-GetVerbose("Clifford");
+  mat_gens := [g_to_mat[g.i]: i in [1..Ngens(g)] cat [-1..-Ngens(g) by -1]];
+  ch := func<x|(x+Ngens(g)-1) mod (2*Ngens(g))+1>;
+  transversal := [<IdentityMatrix(cl,2),[Z|]>];
+  invs := transversal;
+  rows := [[Z|]: i in [1..2*Ngens(g)]];
+  ct := 1;
+  while ct le #transversal and ct le limit do
+    for i in [1..#rows] do
+      if IsDefined(rows[i],ct) then continue; end if;
+      im := transversal[ct,1]*mat_gens[i];
+      if exists(n){n: n in [1..#invs]|test(im*invs[n,1])} then
+        rows[i,ct] := n;
+        rows[ch(i),n] := ct;
+      else
+        Append(~transversal,<im,Append(transversal[ct,2],i)>);
+        Append(~invs,<im^-1,Append(invs[ct,2],-i)>);
+        rows[i,ct] := #transversal;
+        rows[ch(i),#transversal] := ct;
+      end if;
+    end for;
+    ct +:= 1;
+    if ct/10^exp in Z then
+      vprintf Clifford, 1: "%o", (ct div 10^exp) mod 10;
+    end if;
+  end while;
+
+  perms := [SymmetricGroup(#transversal)!i: i in rows];
+  assert forall{x: x in [1..n]|perms[x] eq perms[x+n]^-1} where n is Ngens(g);
+  return perms,transversal;
+end intrinsic;
+
+// Let us apply the Reidemeister-Schreier algorithm to make a presentation
+// from the coset table.  In principle Magma can do this, but I think
+// there are bugs, because it takes forever or ran out of memory on examples
+// that are trivial in GAP.
+
+//////////////////////////
+intrinsic presentation(G::GrpFP,ct::SeqEnum[GrpPermElt],tv::SeqEnum,test::UserProgram) -> GrpFP,HomGrp
+{Give a presentation of a subgroup of finite index defined by the membership-testing function test and specified by the given coset table and transversal (see coset_table, coset_table_matrices.}
+//////////////////////////
+/*
+    --G, finitely presented group.
+    --ct, coset table as indicated by the permutation representation and output by the coset_table function.
+    --tv, transversal
+    --test, membership test.
+    
+    // NOTES:
+    // This is a standard algorithm, but most authors describe it in a remarkably
+    // obscure way.  I found a very clear exposition in section III.8 of
+    // https://www.math.colostate.edu/~hulpke/CGT/cgtnotes.pdf.
+
+    // This function expects the coset table to have a row for every generator
+    // and its inverse, even if the generator is of order 2
+*/
+  ng := Ngens(G);
+  if #ct eq ng then ct cat:= [i^-1: i in ct]; end if;
+  assert #ct eq 2*ng;
+  sw := func<x|x gt ng select x-ng else ng+x>;
+  schreier_gens := [tv[i,1]*G.(j gt ng select ng-j else j)*tv[i^ct[j],1]^-1: i in [1..#tv], j in [1..#ct]];
+  // error checking
+  assert forall{x: x in schreier_gens|test(x)};
+  // do we need inverses too?
+  triv_gens := {@i+(j-1)*#tv: i in [1..#tv], j in [1..2*ng]|Append(tv[i,2],j) in [tv[i^ct[j],2],tv[i^ct[j],2] cat [sw(j),j]]@};
+  // apparently not, but maybe it makes things faster
+  triv_inv_gens := {@i+(j-1)*#tv: i in [1..#tv], j in [1..2*ng]|Append(tv[i^ct[j],2],sw(j)) in [tv[i,2],tv[i,2] cat [j,sw(j)]]@};
+
+  // triv_gens := {@i+(j-1)*#tv: i in [1..#tv], j in [1..2*ng]|Append(tv[i,2],j) eq tv[i^ct[j],2]@};
+  // triv_inv_gens := {@i+(j-1)*#tv: i in [1..#tv], j in [1..2*ng]|Append(tv[i^ ct[j],2],j-ng) eq tv[i,2]@};
+
+  triv_inds := {@x: x in [1..#tv*#ct]|Eltseq(schreier_gens[x]) eq []@};
+  assert triv_gens join triv_inv_gens eq triv_inds;
+
+  // given an element in the subgroup, write it on the Schreier generators
+  function rewrite(x,ct)
+    word := []; coset := 1;
+    for i in Eltseq(x) do
+      ind := (i gt 0 select i else ng-i);
+      Append(~word,(ind-1)*#tv+coset);
+      coset := coset^ct[ind];
+    end for;
+    assert coset eq 1;
+    return word;
+  end function;
+
+  // a bit strange that this didn't cause a problem in previous tests, but
+  // it's possible
+  triv_rels := [[x,Index(schreier_gens,schreier_gens[x]^-1)]: x in [1..#schreier_gens]];
+  assert 0 notin &cat triv_rels;
+  rels := [rewrite(G!t[1]*LHS(r)*G!t[1]^-1,ct): t in tv, r in Relations(G)];
+  pres := quo<FreeGroup(#schreier_gens)|rels,[[i]: i in triv_inds/*triv_gens join triv_inv_gens*/], triv_rels>;
+  pres_to_h := hom<pres->G|schreier_gens>;
+  return pres,pres_to_h;
+end intrinsic;
+
+intrinsic presentation(G::GrpFP,ct::SeqEnum[GrpPermElt],tv::SetIndx,test::UserProgram) -> GrpFP,HomGrp
+{Give a presentation of a subgroup of finite index defined by the membership-testing function test and specified by the given coset table and transversal (see coset_table, coset_table_matrices.}
+
+    tv_new:=[<t,Eltseq(t)> : t in tv ];
+    return presentation(G,ct,tv_new,test);
+
+end intrinsic;
+
+
+//////////////////////////
+intrinsic lex_comparison(word1::GrpFPElt,word2::GrpFPElt)->RngIntElt
+//////////////////////////
+{Compares two words in a finitely presented group lexicographically.
+This is a magma comparison function so can be passed to Sort.}
+    s1:=Eltseq(word1);
+    s2:=Eltseq(word2);
+    if s1 eq s2 then
+        return 0;
+    elif s1 lt s2 then
+        return -1;
+    elif s1 gt s2 then
+        return 1;
+    end if;
+end intrinsic;
+
+//////////////////////////
+intrinsic canonical_cosets(G::GrpFP,H::GrpFP,get_rep::Map,my_comparison::UserProgram) -> SetIndx
+{Given a finitely presented group, a subgroup of finite index, a function for finding coset representatives, and a function that compares words in G, compute a minimal system of coset representatives with respect to the comparison.}
+//////////////////////////
+/*
+Given:
+--G, finitely presented group.
+--H, finitely generated subgroup.
+--get_rep, function which assigned g in G to a coset representative for a right transversal
+--A comparison function on words in G for sorting (I used comparisons of Eltseqs)
+
+Output:
+--C, a set of coset representatives
+
+UPSHOT:
+We can then use Reidemeister-Schreier
+
+DESCRIPTION:
+A canonical set of coset representatives:
+https://github.com/tdupu/hecke/issues/81
+
+1.Let $C = {}}$ and let $Q = [1_G]$.
+2. As long as $Q$ is nonempty, do the following steps 3-5:
+3. Let $r$ be the first element of $Q$.  Remove $r$ from $Q$.
+4. If $Hr \ne Hc$ for all $c \in C$, then include $r$ in $C$, add $[rg_1,rg_1^{-1},\dots,rg_n^{-1}]$ to $Q$, and sort $Q$ into lexicographic order.  (Or graded lexicographic order, or $\dots$.  It shouldn't matter; just choose something and stick to it.)
+5. Return to step 2.
+6. When $Q$ is empty, $C$ is a canonical set of coset representatives.
+
+
+*/
+    C:={@@};
+    Q0:=[Id(G)];
+
+    while #Q0 gt 0 do
+        r:=Q0[1];
+        Qnew:=[s : s in Q0 | s ne r];
+        if #C eq 0 then
+            Include(~C,r);
+            Qnew:=Qnew cat [r*g : g in Generators(G)] cat [r*g^(-1) : g in Generators(G)];
+        elif &and[ get_rep(c) ne get_rep(r): c in C] then
+            Include(~C,r);
+            Qnew:=Qnew cat [r*g : g in Generators(G)] cat [r*g^(-1) : g in Generators(G)];
+        end if;
+        Q0:=Sort(Qnew,my_comparison);
+    end while;
+
+    return C;
+end intrinsic;
+
+//////////////////////////
+intrinsic canonical_cosets(G::GrpFP,H::GrpFP,get_rep::Map,my_comparison::Intrinsic) -> SetIndx
+{Given a finitely presented group, a subgroup of finite index, a function for finding coset representatives, and a function that compares words in G, compute a minimal system of coset representatives with respect to the comparison.}
+//////////////////////////
+    my_comp:=func<x,y|my_comparison(x,y)>;
+    return canonical_cosets(G,H,get_rep,my_comp);
+end intrinsic;
+
+/*
+//EXAMPLE:
+S6:=SymmetricGroup(6);
+a:=S6.1;
+b:=S6.2;
+H:=sub<S6|a^2,b>;
+R,get_rep:=RightTransversal(S6,H);
+#canonical_cosets(S6,G,get_rep,lex_comparison);
+Index(S6,H);
+*/
+
+
+// now that we have the presentation, we can use Magma built-ins to simplify
+
+

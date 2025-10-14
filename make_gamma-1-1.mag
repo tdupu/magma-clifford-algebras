@@ -1,0 +1,141 @@
+Z:=Integers();
+Q:=Rationals();
+AttachSpec("hecke.spec");
+SetVerbose("Clifford",2);
+SetLMFDBRootFolder(".");
+
+sqs:=[-1,-1];
+bound_p:=13;
+num_factors:=3;
+do_over:=false;
+bound_size:=15;
+
+cl:=clifford_algebra(Q,sqs);
+O:=maximal_orders(cl)[1];
+
+//////////
+function make_words(words,avoid0,n)
+//////////
+    assert #words gt 0;
+    if n eq 1 then
+        first:={@ w : w in words @};
+        output:={@ x : x in first | not x in avoid0 @};
+        return output;
+    elif n gt 1 then
+        next := make_words(words,avoid0,n-1);
+        piece1:={@ x*w : w in next, x in words @};
+        piece2:={@ w*x : w in next, x in words @};
+        pre_output:=next join piece1 join piece2;
+        output:={@ x : x in pre_output | not x in avoid0 @};
+        return output;
+    end if;
+end function;
+
+//////////
+function make_integral(x)
+//////////
+    if x lt 1 then
+        return 1/x;
+    else
+        return x;
+    end if;
+end function;
+
+//////////
+function comp_dets(x,y)
+//////////
+    x0:=make_integral(x);
+    y0:=make_integral(y);
+    return x0-y0;
+end function;
+
+//////////
+function generate_alphas(O,bound_p,num_factors,bound_det)
+//////////
+    cl:=clifford_algebra(O);
+    id_mat:=Matrix(2,2,[cl|1,0,0,1]);
+    neg_mat:=Matrix(2,2,[cl|-1,0,0,-1]);
+    avoid:={id_mat,neg_mat};
+    
+    alpha_diag:=[Matrix(2,2,[cl|pi,0,0,prime(pi)]) : pi in primes_up_to(O,bound_p)];
+    alpha_rational1:=[Matrix(2,2,[cl|p,0,0,1]) : p in PrimesUpTo(bound_p)];
+    alpha_rational2:=[Matrix(2,2,[cl|1,0,0,p]) : p in PrimesUpTo(bound_p)];
+    gens1:={@ a : a in alpha_diag cat alpha_rational1 @};
+    gens2:={@ a : a in alpha_diag cat alpha_rational2 @};
+    alphas:=make_words(gens1,avoid,num_factors) join make_words(gens2,avoid,num_factors);
+    betas:=[];
+    for alpha in alphas do
+        d:=pdet(alpha)[1];
+        if d le bound_det then
+            Append(~betas,alpha);
+            if IsPrime(Z!d) then
+                Append(~betas,alpha^-1);
+            end if;
+        end if;
+    end for;
+    return betas;
+end function;
+    
+    
+//////////
+function sort_alphas_by_det(alphas)
+//////////
+    alphas_by_det:=AssociativeArray();
+    for alpha in alphas do
+        d:=pdet(alpha)[1];
+        if d in Keys(alphas_by_det) then
+            Append(~alphas_by_det[d],alpha);
+        else
+            alphas_by_det[d]:=[alpha];
+        end if;
+    end for;
+    return alphas_by_det;
+end function;
+
+neg_mat:=Matrix(2,2,[cl|-1,0,0,-1]);
+avoid0:={neg_mat};
+
+//Now we are going to only overwrite the things that we haven't looked for yet.
+fname:=get_lmfdb_sl2_path(cl);
+existing:=OpenTest(fname, "r");
+
+if existing then
+    //close the file;
+    delete existing;
+    //do something
+    lab:=get_label(O);
+    SL2O:=clifford_bianchi_group(lab);
+    O:=clifford_order(SL2O);
+    cl:=clifford_algebra(SL2O);
+    
+    fname:=get_lmfdb_gamma0_path(O);
+    existing := OpenTest(fname, "r");
+    if existing then
+        //extract labels:
+        lines := {@ H : H in Split(Read(fname), "\n") @};
+        labels:={@ load_lmfdb_gamma0(line)`label : line in lines @};
+        //close the file;
+        delete existing;
+    else
+        labels:={@ @};
+    end if;
+    
+    alphas:=generate_alphas(O,bound_p,num_factors,bound_size);
+    new_alphas:={@ alpha : alpha in alphas | (not get_label(SL2O,alpha) in labels) or do_over @};
+    alphas_by_det:=sort_alphas_by_det(new_alphas);
+    dets:=Sort([ d : d in Keys(alphas_by_det)],comp_dets);
+    dets;
+    for det in dets do
+        printf "Determinant %o, %o \n", det,RealField(2)! Index(dets,det)/#dets;
+        alphas:=alphas_by_det[det];
+        for alpha in alphas do
+            lab:=get_label(SL2O,alpha);
+            T0:=Cputime();
+            gamma0:=Gamma0_fp(SL2O,alpha);
+            T1:=Sprintf("%o",Cputime(T0)); //later make this into an option, see #96
+            gamma0_lmfdb:=create_lmfdb_object(SL2O,alpha);
+            write_lmfdb_gamma0(gamma0_lmfdb: overwrite := do_over, timing:=T1);
+            printf "%o, %o seconds \n ", RealField(2)! Index(alphas,alpha)/#alphas, T1;
+        end for;
+    end for;
+end if;

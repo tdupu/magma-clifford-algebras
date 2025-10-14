@@ -1,0 +1,61 @@
+Z:=Integers();
+Q:=Rationals();
+AttachSpec("hecke.spec");
+SetVerbose("Clifford",1);
+SetLMFDBRootFolder(".");
+
+//####################
+
+
+squares1:=[[-1],[-2],[-3],[-7],[-11]];
+squares2:=[[ -1, -1 ],
+[ -1, -2 ],
+[ -1, -3 ],
+[ -2, -3 ],
+[ -2, -5 ],
+[ -1, -6 ],
+[ -2, -6 ],
+[ -1, -7 ],
+[ -1, -10 ],
+[ -2, -10 ],
+[ -2, -14 ],
+[ -2, -26 ]
+];
+squares3:=[[ -1, -1, -2 ],[ -2, -2, -2 ],[ -1, -1, -3 ],[ -2, -2, -3 ],[ -1, -1, -6 ],[ -1, -2, -6 ],[ -2, -2, -6 ],[ -2, -5, -6 ],[ -2, -5, -10 ],[ -1, -6, -22 ],[ -1, -1, -1 ],[ -1, -2, -2 ],[ -1, -3, -3 ],[ -1, -1, -5 ],[ -2, -2, -5 ],[ -2, -3, -6 ],[ -1, -6, -6 ],[ -1, -3, -7 ],[ -1, -2, -10 ],[ -2, -3, -14 ],[ -1, -2, -26 ]];
+
+squares:=squares2;
+working:=[];
+not_working:=[];
+nonsense:=[];
+
+do_over:=false;
+
+for sqs in squares2 do
+    printf "squares: %o \n", RealField(2)!Index(squares2,sqs)/#squares2;
+    cl<I>:=clifford_algebra(Q,sqs);
+    time ords:=maximal_orders(cl);
+    for O in ords do
+        printf " orders: %o \n", RealField(2)!Index(ords,O)/#ords;
+        if is_norm_euclidean(O) and is_star_invariant(O) then
+            try
+                try
+                    SL2O:=clifford_bianchi_group(get_label(O));
+                catch e
+                    printf "%o \n",get_label(O);
+                    t0:=Time();
+                    SL2O:=clifford_bianchi_group(O);
+                    T0:=Time(t0);
+                    write_lmfdb_sl2(SL2O:overwrite:=do_over,timing:=T0);
+                end try;
+                
+                printf "working: %o \n",get_label(O);
+                Append(~working,get_label(O));
+            catch e
+                printf "not working: %o \n",get_label(O);
+                Append(~not_working,get_label(O));
+            end try;
+        else
+            Append(~nonsense,get_label(O));
+        end if;
+    end for;
+end for;

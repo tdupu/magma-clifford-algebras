@@ -1,0 +1,23 @@
+AttachSpec("hecke.spec");
+SetVerbose("LMFDB",4);
+SetLMFDBRootFolder(".");
+Z:=Integers();
+Q:=RationalField();
+
+
+squares:=[[-1],[-2],[-3],[-7],[-11]];
+clifford_euclidean:=[];
+for sqs in squares do
+    cl := clifford_algebra(Q,sqs);
+    I:=get_I(cl);
+    ords := get_maximal_orders(cl);
+    for ord in ords do
+        lat:=vec(ord);
+        r:=CoveringRadius(lat);
+        if r le 1 then
+            print sqs,r;
+            Append(~clifford_euclidean,sqs);
+            write_lmfdb_clifford_orders(cl,[ord]);
+        end if;
+    end for;
+end for;

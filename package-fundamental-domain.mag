@@ -1,0 +1,2307 @@
+Z:=IntegerRing();
+Q:=RationalField();
+
+declare verbose Fundamental, 6;
+
+
+////////////////////
+intrinsic '^'(x::CliffAlgElt,u::CliffAlgElt)->CliffAlgElt
+////////////////////
+{Apply the conjugation star(u)*x*u.}
+    return star(u)*x*u;
+end intrinsic;
+
+////////////////////
+intrinsic '^'(x::CliffAlgElt,u::CliffOrdElt)->CliffAlgElt
+////////////////////
+{Apply the conjugation star(u)*x*u.}
+    return star(u)*x*u;
+end intrinsic;
+
+////////////////////
+intrinsic '^'(x::CliffOrdElt,u::CliffAlgElt)->CliffAlgElt
+////////////////////
+{Apply the conjugation star(u)*x*u.}
+    return star(u)*x*u;
+end intrinsic;
+
+////////////////////
+intrinsic '^'(x::CliffOrdElt,u::CliffOrdElt)->CliffAlgElt
+////////////////////
+{Apply the conjugation star(u)*x*u.}
+    return star(u)*x*u;
+end intrinsic;
+
+////////////////////
+intrinsic '^'(x::CliffOrdElt,u::CliffOrdElt)->CliffAlgElt
+////////////////////
+{Apply the conjugation star(u)*x*u.}
+    return star(u)*x*u;
+end intrinsic;
+
+////////////////////
+intrinsic '^'(v::ModTupFldElt,u::CliffAlgElt)->ModTupFldElt
+////////////////////
+{
+Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.
+}
+    cl:=Parent(u);
+    return magma_vector(clifford_vector(cl,Vector(v))^u);
+end intrinsic;
+
+////////////////////
+intrinsic '^'(v::TorLatElt,u::CliffAlgElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.}
+    P:=Parent(v);
+    return P!(Vector(v)^u);
+end intrinsic;
+
+////////////////////
+intrinsic '^'(v::ModTupFldElt,u::CliffOrdElt)->ModTupFltElt
+////////////////////
+{Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.}
+    O:=Parent(u);
+    cl:=clifford_algebra(O);
+    return (v^(cl!u));
+end intrinsic;
+
+////////////////////
+intrinsic '^'(v::TorLatElt,u::CliffOrdElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.}
+    P:=Parent(v);
+    O:=Parent(u);
+    cl:=clifford_algebra(O);
+    return P!(Vector(v)^(cl!u));
+end intrinsic;
+
+
+////////////////////
+intrinsic '^'(S::SetEnum,u::CliffOrdElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u to every element of the set.}
+   return {s^u : s in S};
+end intrinsic;
+
+////////////////////
+intrinsic '^'(S::SetEnum,u::CliffAlgElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u to every element of the set.}
+   return {s^u : s in S};
+end intrinsic;
+
+////////////////////
+intrinsic '^'(poly::TorPol,u::CliffAlgElt)->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    return Polyhedron([v^u: v in Vertices(poly)]);
+end intrinsic;
+
+////////////////////
+intrinsic '^'(poly::TorPol,u::CliffOrdElt)->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    O:=Parent(u);
+    cl:=clifford_algebra(O);
+    return poly^(cl!u);
+end intrinsic;
+
+////////////////////
+intrinsic polyhedron(vs::SeqEnum[CliffAlgElt])->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    return Polyhedron([Eltseq(vector(v)) : v in vs]);
+end intrinsic;
+
+////////////////////
+intrinsic polytope(vs::SeqEnum[CliffAlgElt])->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    return Polytope([Eltseq(vector(v)) : v in vs]);
+end intrinsic;
+
+////////////////////
+intrinsic vector(v::CliffOrdElt)->ModTupFldElt
+////////////////////
+{Return a ModTupFldElt of an element in a Clifford order.
+The coordinates returned are the clifford algebra clifford vector coordinates not the lattice coordinates}
+    O:=Parent(v);
+    cl:=clifford_algebra(O);
+    return vector(cl!v);
+end intrinsic;
+
+////////////////////
+intrinsic apply_operation(v::ModTupFldElt,cl::CliffAlg,operation::UserProgram)->ModTupFldElt
+////////////////////
+{
+Apply the operation.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.
+}
+    return vector(operation(clifford_vector(cl,Vector(v))));
+end intrinsic;
+
+////////////////////
+intrinsic apply_operation(v::TorLatElt,cl::CliffAlg,operation::UserProgram)->TorPol
+////////////////////
+{}
+    P:=Parent(v);
+    return P!(apply_operation(Vector(v),cl,operation));
+end intrinsic;
+
+////////////////////
+intrinsic apply_operation(poly::TorPol,cl::CliffAlg,operation::UserProgram)->TorPol
+////////////////////
+{Apply an operation to all the vertices of a polyhedron.}
+    return Polyhedron([apply_operation(v,cl,operation): v in Vertices(poly)]);
+end intrinsic;
+
+////////////////////
+intrinsic inversion_inv(cl::CliffAlg,poly::TorPol)->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    function inv(x)
+        return -bar(x);
+    end function;
+    return apply_operation(poly,cl,inv);
+end intrinsic;
+
+////////////////////
+intrinsic inversion_inv(cl::CliffAlg,elt::TorLatElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    function inv(x)
+        return -bar(x);
+    end function;
+    return apply_operation(elt,cl,inv);
+end intrinsic;
+
+////////////////////
+intrinsic '+'(v::ModTupFldElt,u::CliffAlgElt)->ModTupFldElt
+////////////////////
+{
+Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.
+}
+    cl:=Parent(u);
+    return magma_vector(clifford_vector(cl,Vector(v))+u);
+end intrinsic;
+
+////////////////////
+intrinsic '+'(v::TorLatElt,u::CliffAlgElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.}
+    P:=Parent(v);
+    return P!(Vector(v)+u);
+end intrinsic;
+
+////////////////////
+intrinsic '+'(v::ModTupFldElt,u::CliffOrdElt)->ModTupFltElt
+////////////////////
+{Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.}
+    O:=Parent(u);
+    cl:=clifford_algebra(O);
+    return (v+(cl!u));
+end intrinsic;
+
+////////////////////
+intrinsic '+'(v::TorLatElt,u::CliffOrdElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u.
+The vector is assumed to be in clifford vector coordinates not in coordinates for the basis of the lattice of clifford vectors of the order.}
+    P:=Parent(v);
+    O:=Parent(u);
+    cl:=clifford_algebra(O);
+    return P!(Vector(v)+(cl!u));
+end intrinsic;
+
+
+////////////////////
+intrinsic '+'(S::SetEnum,u::CliffOrdElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u to every element of the set.}
+   return {s+u : s in S};
+end intrinsic;
+
+////////////////////
+intrinsic '+'(S::SetEnum,u::CliffAlgElt)->TorLatElt
+////////////////////
+{Apply the conjugation star(u)*x*u to every element of the set.}
+   return {s+u : s in S};
+end intrinsic;
+
+////////////////////
+intrinsic '+'(poly::TorPol,u::CliffAlgElt)->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    return Polyhedron([v+u: v in Vertices(poly)]);
+end intrinsic;
+
+////////////////////
+intrinsic '+'(poly::TorPol,u::CliffOrdElt)->TorPol
+////////////////////
+{Apply the conjugation star(u)*x*u to all of the vertices of the polyhedron.}
+    O:=Parent(u);
+    cl:=clifford_algebra(O);
+    return poly+(cl!u);
+end intrinsic;
+
+////////////////////
+intrinsic bisect(p::ModTupRngElt,q::ModTupRngElt : gram := IdentityMatrix(Q,#Eltseq(p)))->TorPol,ModTupFldElt,FldRatElt
+////////////////////
+{Given two points, write the half-space bounded by points equidistant
+from the two and containing the second one.  Optional argument: the Gram
+matrix of the ambient.}
+    
+    error if p eq q, "can't find a half-space containing and not containing the same point";
+    
+    vs := VectorSpace(Q,#Eltseq(p),gram);
+    p := vs!Eltseq(p);
+    q := vs!Eltseq(q);
+    
+    mid := (p+q)/2;
+    vec := q-p;
+    
+    c := InnerProduct(mid,vec);
+    cp := InnerProduct(vec,p);
+    assert cp ne c;
+    
+    if cp gt c then
+        vec := -vec;
+        c := -c;
+    end if;
+    
+    assert (vec,p) lt c and (vec,q) gt c;
+    
+    /*
+    HalfSpaceToPolyhedron takes v,c and looks for x such that InnerProduct(v,x)>=c.
+    The InnerProduct is the standard dot product and there doesn't seem to be a way of
+    changing the quadratic form on TorLat so we use that InnerProduct(x*gram,y) is the
+    new quadratic form.
+    */
+    hs := HalfspaceToPolyhedron(Eltseq(vec*gram),c);
+    
+    tl := Universe(Vertices(hs));
+    assert tl!p notin hs and tl!q in hs;
+    return hs, vec, c;
+end intrinsic;
+
+////////////////////
+intrinsic bisect(p::TorLatElt,q::TorLatElt : gram := IdentityMatrix(Q,#Eltseq(p)))->TorPol,ModTupFldElt,FldRatElt
+////////////////////
+{Given two points, write the half-space bounded by points equidistant
+from the two and containing the second one.  Optional argument: the Gram
+matrix of the ambient.}
+    pv:=Vector(p);
+    qv:=Vector(q);
+    return bisect(pv,qv : gram:=gram);
+end intrinsic;
+
+////////////////////
+intrinsic get_bisection_point(lat::Lat,f::TorPol)->LatElt
+////////////////////
+{Given a facet of a Voronoi polytope return
+the points p such that the facet is defined
+by the plane that is equidistant between
+that point and the origin.
+
+As f runs over facets of the voronoi cell, this is output is the third output of VoronoiCell.
+}
+    bd:=BasisDenominator(lat);
+    // gram:=GramMatrix(lat);
+    gram := InnerProductMatrix(lat);
+    
+    ker := Kernel(Transpose(Matrix(Q,[Eltseq(x-y): x,y in Vertices(f)])*ChangeRing(gram,Q)));
+    // assert Dimension(ker) eq 1;
+    lat_vs := sub<Generic(ker)|Basis(lat)>;
+    ker meet:= lat_vs;
+    assert Dimension(ker) eq 1;
+    
+    l1 := LatticeWithBasis(Matrix([LCM([Denominator(i): i in Eltseq(ker.1)])*ker.1])/bd,ChangeRing(InnerProductMatrix(lat),Q));
+    lp := l1 meet lat;
+    // and it's either the generator of this or its negative.
+    p1 := Polytope([Universe(Vertices(f))|lp.1,-lp.1]);
+    pt := p1 meet f;
+    assert Dimension(pt) eq 0;
+    spt := Sign(rep{x: x in Eltseq(Rep(Vertices(pt)))|x ne 0});
+    slp := rep{p: p in [lp.1,-lp.1]|Sign(rep{x: x in Eltseq(p)|x ne 0}) eq spt};
+    return slp;
+end intrinsic;
+
+
+/*
+This maybe needs to be fixed since it may in general be a polyhedral complex and not a polyhedron if the union of the two polyhedra are not convex.
+*/
+
+////////////////////
+intrinsic join_polyhedra(polys::Setq[TorPol])->TorPol
+////////////////////
+{}
+    facets:=&cat[Facets(x) : x in polys];
+    facets_set:=Set(facets);
+    facets_external:={f: f in facets_set| Multiplicity(facets,f) eq 1 };
+    return Polyhedron(&cat[Vertices(f) : f in facets_external]);
+end intrinsic;
+
+/*
+This can certainly be sped up. This might be a horrible idea to recompute all of these.
+*/
+
+function polytope_comparison(x,y)//(x::TorPol,y::TorPol)->RngIntElt
+//{}
+    subpieces:=[x,y];
+    verts_of_subpieces := [Vertices(i): i in subpieces];
+    vertex_seqs:=[Sort([Eltseq(i): i in v]): v in verts_of_subpieces];
+    perm:=SymmetricGroup(#subpieces).1;
+    Sort(~vertex_seqs,~perm);
+    subpieces_sorted := [subpieces[i^perm]: i in [1..#subpieces]];
+    return Index(subpieces_sorted,x)-Index(subpieces_sorted,y);
+end function;
+
+function polytope_seq_comparison(x,y) //(x::SeqEnum[TorPol],y::SeqEnum[TorPol])->RngIntElt
+//{}
+    lenx:=#x;
+    leny:=#y;
+    len:=Minimum([#x,#y]);
+    for i in [1..len] do
+        res:=polytope_comparison(x[i],y[i]);
+        if res ne 0 then
+            return res;
+        end if;
+    end for;
+    return lenx -leny;
+end function;
+
+function polytope_seq_seq_comparison(x,y) //(x::SeqEnum[SeqEnum[TorPol]],y::SeqEnum[SeqEnum[TorPol]])->RngIntElt
+    lenx:=#x;
+    leny:=#y;
+    len:=Minimum([#x,#y]);
+    for i in [1..len] do
+        res:=polytope_seq_comparison(x[i],y[i]);
+        if res ne 0 then
+            return res;
+        end if;
+    end for;
+    return lenx -leny;
+end function;
+
+intrinsic Sorted(~x::.)
+{}
+    if #x eq 0 then
+        //do nothing
+    elif Type(x[1]) eq TorPol then
+        Sort(~x,polytope_comparison);
+    elif Type(x[1]) eq SeqEnum then
+        if Type(x[1][1]) eq TorPol then
+            Sort(~x,polytope_seq_comparison);
+        elif Type(x[1][1]) eq SeqEnum then
+            if Type(x[1][1][1]) eq TorPol then
+                Sort(~x,polytope_seq_seq_comparison);
+            else
+                error "Not implemented for this type";
+            end if;
+        else
+            error "Not implemented for this type";
+        end if;
+    else
+        error "Not implemented for this type";
+    end if;
+end intrinsic;
+
+
+intrinsic Sorted(x::.)->SeqEnum
+{}
+    y:=x;
+    Sorted(~y);
+    return y;
+end intrinsic;
+
+
+////////////////////
+intrinsic subdivide(piece::TorPol)->SeqEnum[TorPol]
+////////////////////
+{Subdivide a polyhedron by taking the vertices and then using
+d(x,v1)<d(x,v2)<...<d(x,vn) for each ordering of the vertices.}
+    vprintf Fundamental, 4: "chopping up a piece...\n";
+    t1:=Cputime();
+    subpieces:=[];
+    verts:=Vertices(piece);
+    i:=1;
+    for g in SymmetricGroup(#verts) do
+        gverts:=[verts[i^g] : i in [1..#verts]];
+        if IsDivisibleBy(i,10) then
+            vprintf Fundamental, 4: "chopp...\n";
+        end if;
+        subpiece := piece meet &meet[bisect(gverts[i],gverts[i+1]) : i in [1..#verts-1]];
+        if Dimension(subpiece) eq Dimension(piece) then
+            Append(~subpieces,subpiece);
+        end if;
+        i:=i+1;
+    end for;
+    vprintf Fundamental, 4: "%o seconds...\n",Cputime(t1);
+    
+    return subpieces;
+end intrinsic;
+
+////////////////////
+intrinsic center(poly::TorPol)->TorLatElt
+////////////////////
+{Find the center of a convex polyhedron. This is the average of the vertices of the polyhedron.}
+    verts:=Vertices(poly);
+    return (1/#verts)*&+[v : v in verts];
+end intrinsic;
+
+////////////////////
+intrinsic stellar_subdivision(poly::TorPol,pt::TorLatElt)->SeqEnum[TorPol]
+////////////////////
+{Perform a stellar subdivion of the convex polyhedra at the point pt.}
+    require pt in poly: "pt must be in the polytope you are subdividing.";
+    dim:=Dimension(poly);
+    facets := Faces(poly)[dim];
+    cones := [Polyhedron(Append(Vertices(f),pt)): f in facets];
+    return cones;
+end intrinsic;
+
+////////////////////
+intrinsic stellar_subdivision(poly::TorPol)->SeqEnum[TorPol]
+////////////////////
+{Perform a stellar subdivion of the convex polyhedra at the point pt.}
+    return stellar_subdivision(poly,center(poly));
+end intrinsic;
+
+////////////////////
+intrinsic permutation_action(polys::Setq[TorPol],matrix_group::GrpMat)->GrpPerm,Map
+////////////////////
+{
+Given a collection of polyhedra that matrix_group acts on via a right action find the permutation associated to each element of the matrix group.
+}
+    //assert {matrix_group.i : i in [1..Ngens(matrix_group)]} eq Generators(matrix_group);
+    perms:=[[Index(polys,polys[i]*matrix_group.j): i in [1..#polys]] : j in [1..Ngens(matrix_group)]];
+    //perms;
+    PG := PermutationGroup<#polys|perms>;
+    to_PG := hom<matrix_group->PG|perms>;
+    return PG,to_PG;
+end intrinsic;
+
+////////////////////
+intrinsic is_adjacent(pol1::TorPol,pol2::TorPol)->BoolElt
+////////////////////
+{returns true if the polyhedra meet in a codimension one boundary.}
+    dim:=Dimension(pol1);
+    return Dimension(pol1 meet pol2) eq dim-1;
+end intrinsic;
+
+function codim_2_ints(pols)
+  dim := Dimension(pols[1]);
+  ints := [<&meet s,s>: s in Subsets(Set(pols),2)|Dimension(&meet s) eq dim-1];
+  return ints;
+end function;
+
+function repeated_codim_2(fd)
+  facets := {@x: x in Facets(f), f in fd@};
+  ints := codim_2_ints(facets);
+  comps := [x[1]: x in ints];
+  if exists(badi){i: i in [1..#comps]|Index(comps,comps[i]) lt i} then
+    badpair := <ints[badi,1],[Index(facets,i): i in ints[badi,2]],[Index(facets,i): i in ints[Index(comps,comps[badi]),2]]>;
+    return true, badpair;
+  end if;
+  return false, <>;
+end function;
+
+// I think this is a good condition to maintain: that you don't have two cones
+// that meet in a certain dimension but only in part of a face.
+aligned := func<cones|forall{x: x,y in cones|x meet y in Faces(x,Dimension(x meet y))}>;
+subaligned := func<cones|forall{x: x,y in cones|exists{c: c in [x,y]|x meet y in Faces(c,Dimension(x meet y))}}>;
+
+// input: a list of cones, broken into orbits
+// output: a choice of one cone from each orbit that fits together nicely
+// this doesn't really work
+function join_orbs(cones,orbs)
+  dim := Dimension(cones[1]);
+  gr := Graph<{1..#orbs}|{{i,j}: i,j in [1..#orbs]|i lt j and exists{r: r in orbs[j]|Dimension(cones[orbs[i,1]] meet cones[r]) eq dim-1}}>;
+  vs := VertexSet(gr);
+  inv_orb := AssociativeArray();
+  for i in [1..#orbs], j in orbs[i] do inv_orb[j] := i; end for;
+
+  my_st := [1];
+  repeat
+    // build a spanning tree step by step
+    nbs := {i: i in [1..#orbs]|i notin {inv_orb[x]: x in my_st} and #{x: x in my_st|vs!i adj vs!inv_orb[x]} gt 0};
+    // the new cone has to meet an existing one in codimension 1
+    // but it doesn't have to be unique
+    candidates := [x: x in orbs[nb], nb in nbs|exists{i: i in my_st|Dimension(cones[i] meet cones[x]) eq dim-1}];
+    // this is where we make the condition that they fit together nicely
+    // we want to be sure that if the new one meets an old one in codimension
+    // greater than 1, then there is another component that explains this
+    // intersection by being adjacent and containing the intersection
+    good_candidates := [x: x in candidates|forall{i: i in my_st|exists{j: j in my_st|Dimension(cones[x] meet cones[j]) eq dim-1 and (xi meet cones[j] eq xi) where xi is cones[x] meet cones[i]}}];
+    Append(~my_st,good_candidates[1]);
+  until #my_st eq #orbs;
+  return my_st;
+end function;
+
+// This function tries to join an aligned collection of polyhedra, broken
+// into orbits, in a way that will give something on which is_bad will
+// return false.  It does not work on our existing subdivision, which is
+// not aligned.
+
+// We can tell it to start with one particular cone, which is useful when
+// inv_stable is true, because we can force a start that meets the reflection
+// hyperplane, so that the fundamental domain ends up being connected.
+
+// inv_gp is an additional group that is supposed to be preserved.  The idea
+// is that if we are building an inv_stable fundamental domain, then inv_gp
+// will be the group of order 2 generated by inversion, and otherwise it
+// will be trivial.
+function join_aligned(cones,orbs,inv_gp: start := 1)
+  dim := Dimension(cones[1]);
+  // the condition is safe because of the alignment
+  // this is a lot faster than testing the dimensions
+  // but actually we don't need this graph any more
+  // gr := Graph<{1..#orbs}|{{i,j}: i,j in [1..#orbs]|i lt j and exists{r: f in Facets(cones[orbs[i,1]]), g in Facets(cones[r]), r in orbs[j]|f eq g}}>;
+  // vs := VertexSet(gr);
+  inv_orb := AssociativeArray();
+  vprintf Clifford, 2: "making a fundamental domain by joining representatives of %o orbits\n", #orbs/#inv_gp;
+  for i in [1..#orbs], j in orbs[i] do inv_orb[j] := i; end for;
+
+  vprint Clifford, 4: "testing validity of starting point";
+  my_st := Orbit(inv_gp,start);
+  gr := Graph<Orbit(inv_gp,start)|{{x,y}: x,y in Orbit(inv_gp,start)|x lt y and exists{f: f in Facets(cones[x])|f in Facets(cones[y])}}>;
+  // this can't happen if #inv_gp is 1
+  error if not IsConnected(gr), "invalid starting point";
+
+  all_outer := {*x: x in Facets(cones[i]), i in my_st*};
+  outer := {@x: x in Set(all_outer)|Multiplicity(all_outer,x) eq 1@};
+  pairs := {@{@x,y@}: x,y in outer|Dimension(x meet y) eq dim-2@};
+  // changed from repeat-until; there can be only 1 orbit
+  while #my_st lt #orbs do
+    vprintf Clifford, 3: "choosing orbit %o of %o: ", #my_st+1, #orbs; 
+    cp := Cputime();
+    new_cones := {x: x in [1..#cones]|forall{v: v in Orbit(inv_gp,x)|inv_orb[v] notin {inv_orb[i]: i in my_st} and exists{s: s in outer|s in Facets(cones[x])}}};
+    found := false;
+    for n in new_cones do
+      norb := Orbit(inv_gp,n); if n ne Min(norb) then continue; end if;
+      all_facets := {*x: x in Facets(cones[i]), i in norb*};
+      new_facets := {@x: x in Set(all_facets)|Multiplicity(all_facets,x) eq 1 and x notin outer@};
+      old_facets := {@x: x in all_facets|x in outer@};
+      new_pairs := {@{@x,y@}: x in new_facets, y in new_facets join (outer diff old_facets)|Dimension(x meet y) eq dim-2@};
+      keep_pairs := {@x: x in pairs|forall{i: i in old_facets|i notin x}@};
+      if forall{p: p in keep_pairs, q in new_pairs|&meet p ne &meet q} then
+        // it's a keeper
+        my_st join:= {@x: x in norb@};
+        pairs := keep_pairs join new_pairs;
+        outer := (outer join new_facets) diff old_facets;
+        found := true;
+        break n;
+      end if;
+    end for;
+    error if not found, "failed to find a piece";
+    vprintf Clifford, 2: "%o ",my_st[#my_st];
+    vprintf Clifford, 3: "(%o seconds)\n", Cputime(cp);
+  end while;
+  fd := [cones[i]: i in my_st];
+  return fd;
+end function;
+
+
+/////////////////////////
+intrinsic convex_hull(seq::SeqEnum[TorPol])->TorPol
+/////////////////////////
+{Take the convex hull of two vertices of two TorPol.}
+    verts:=&cat[Vertices(x) : x in seq];
+    return Polytope(verts);
+end intrinsic;
+
+/////////////////////////
+intrinsic exterior_facets(FD::Setq[TorPol])->SeqEnum[TorPol]
+/////////////////////////
+{Find the real exterior facets of a weakly aligned polytopal complex in the plane. This essentially performs a Z/2 addition on the facets appearing with multiplicity one. The Z/2 addition is done by shredding these facets. }
+    sides:=&cat[Facets(P) : P in FD];
+    exterior_sides0:=[ s : s in sides| Multiplicity(sides,s) eq 1];
+    bad_pairs:=[ s : s in Subsets(Set(exterior_sides0),2) | Dimension(pair[1] meet pair[2]) eq Dimension(pair[1]) where pair is [ x : x in s]];
+    bad_elts:=&join(bad_pairs);
+    exterior_sides_good:=[ s : s in exterior_sides0 | not s in bad_elts];
+    
+    FD_sh:=shred(FD);
+    
+    replacements:={@ @};
+    for bad_pair in bad_pairs do
+        bp := [x : x in bad_pairs[1]];
+        A:=bp[1];
+        B:=bp[2];
+        H:=convex_hull([A,B]);
+        replacements:=replacements join {@ H meet D : D in shred(FD) @};
+    end for;
+    
+    facets:=exterior_sides_good cat [r : r in replacements];
+    return [f : f in facets | Multiplicity(facets,f) eq 1];
+end intrinsic;
+
+/*
+EXAMPLE OF EXTERIOR FACETS:
+
+P1 := Polytope([ [0,0], [0,2],[2,0], [2,2]]);
+P2:= Polytope([[2,0],[2,1],[3,1],[3,0]]);
+FD:=[P1,P2];
+exterior_facets(FD);
+
+*/
+
+/////////////////////////
+intrinsic is_bad0(FD::SeqEnum[TorPol])->BoolElt
+/////////////////////////
+{In a weakly aligned polyhedral complex does there exist two distinct pairs of facets with the property that they intersect in the same codimension 2 cell.
+This is an obstruction to being a combinatorial manifold.}
+    sides:=exterior_facets(FD);
+    Sorted(~sides);
+    adjacent_pairs:=[ [i,j] : i in [1..#sides], j in [1..#sides] | i lt j and Dimension(sides[i] meet sides[j]) eq Dimension(sides[i])-1];
+    if exists(pairs){ [pair1,pair2] : pair1 in adjacent_pairs, pair2 in adjacent_pairs | pair1 lt pair2 and (sides[pair1[1]] meet sides[pair1[2]]) eq (sides[pair2[1]] meet sides[pair2[2]])} then
+        return true, pairs;
+    else
+        return false;
+    end if;
+end intrinsic;
+
+/////////////////////////
+intrinsic is_bad_assoc0(FD1::Assoc)->BoolElt
+/////////////////////////
+{An alias for is_bad0, but takes associative arrays as input.}
+    return is_bad0([FD1[k] : k in Keys(FD1)]);
+end intrinsic;
+
+/////////////////////////
+intrinsic cones_with_action(O::CliffOrd:include_inv:=true,inv_stable:=false)->SeqEnum[TorPol],SeqEnum,GrpPerm,Map,GrpPerm,Map,GrpPerm,Map
+/////////////////////////
+{Given a clifford order, return a partition of the Voronoi cell for the lattice of clifford vectors into cones with its right permutation action by the clifford units of the order by conjugation.}
+    cl:=clifford_algebra(O);
+    inv:=func<x|inversion_inv(cl,x)>;
+
+
+    L:=vec(O:small:=true);
+    units_right:=units_matrix_group(O: action:="right",include_inv:=include_inv);
+    gramL:=ChangeRing(GramMatrix(L),Q);
+
+    error if exists{l: l in Basis(L), g in Generators(units_right)|Vector(BaseRing(g),Eltseq(l))*g notin L}, "group does not act on lattice";
+
+    VC,stuff,VC_vecs:=VoronoiCell(L);
+    VC_poly:=Polyhedron([Eltseq(f): f in VC]);
+    dim:=Rank(L);
+    facets := Faces(VC_poly)[dim];
+    L_tor:=Parent(Vertices(VC_poly)[1]);
+
+    vprintf Clifford, 3: "STEP: break up the Voronoi cell according to cones for each facet.\n";
+
+    zero := L_tor!0;
+    cones := [Polyhedron(Append(Vertices(i),zero)): i in facets];
+    Sorted(~cones);
+
+    if include_inv then
+        cones_bad:=[cone : cone in cones|Dimension(cone meet inv(cone)) ge dim];
+        cones_invariant:=[cone : cone in cones|cone eq inv(cone)];
+        assert cones_bad eq cones_invariant;
+
+        vprintf Clifford,3: "STEP: break up invariant cones.\n";
+
+        HSL:=HalfspaceToPolyhedron(Dual(L_tor)!vector(cl!1),0);
+        HSR:=HalfspaceToPolyhedron(Dual(L_tor)!vector(cl!-1),0);
+
+        function break_cone(cones,cone)
+            old_orb:={cone*g : g in units_right};
+            cones_good:={cone: cone in cones|not cone in old_orb};
+            coneL:=cone meet HSL;
+            coneR:=cone meet HSR;
+            orbL:={coneL*g : g in units_right};
+            orbR:={coneR*g : g in units_right};
+            cones_new:= cones_good join orbL join orbR;
+            return [cone: cone in cones_new];
+        end function;
+
+        M:=inv_matrix(cl);
+        assert HSR eq HSL*M;
+
+        //cones_bad:=[cone : cone in cones|Dimension(cone meet inv(cone)) ge dim];
+        i:=0;
+
+        vprintf Clifford,3: "STEP (include_inv=true only): Break down %o bad cones \n", #cones_bad;
+
+
+        if #cones_bad gt 0 then
+            repeat
+                cone_bad:=cones_bad[1];
+                cones:=break_cone(cones,cone_bad);
+                i+:=1;
+                vprintf Fundamental,4: "breaking... %o \n",i;
+                cones_bad:=[cone : cone in cones|Dimension(cone meet inv(cone)) ge dim];
+            until #cones_bad eq 0;
+        end if;
+
+        assert join_polyhedra(cones) eq VC_poly;
+        assert Volume(VC_poly) eq &+[Volume(cone):cone in cones];
+
+    end if;
+    
+    //STEP: break the facets corresponding to the cones
+    facets := Faces(VC_poly)[dim];
+    facets1:={cone meet face : face in facets, cone in cones| Dimension(cone meet face) eq dim-1};
+    facets1:=Sorted([face:face in facets1]);
+
+    //STEP: for the action of the matrix group on the cones.
+
+    PG,to_PG := permutation_action(facets1,units_right);
+    orbs := Orbits(PG);
+
+    //STEP: partition the cones which have non-trivial stabilizers
+
+    if exists{c: c in [1..#cones]|#Stabilizer(PG,c) gt 1} then
+        vprintf Clifford, 3: "STEP: There are cones which have nontrivial stabilizers. More chopping. \n";
+        cones1 := [];
+        //s := (dim mod 2)+2;
+        orbs := Orbits(PG);
+        for orb in orbs do
+            elt:=Rep(orb);
+            f := facets1[elt]; //old cone is the hull of the vertices of facet and zero
+            // f_pieces:={@ p : p in subdivide(f)@};
+            // cones1 cat:= [Polyhedron([v: v in Vertices(m)] cat [zero]): m in f_pieces];
+            stab_f := Stabilizer(PG,Rep(orb));
+            v_action := PermutationGroup<#vs|[[Index(vs,Vector(v)*ChangeRing(i@@to_PG,Q)): v in vs]: i in Generators(stab_f)]> where vs is Vertices(f);
+            // this won't work if the quadratic form defining the
+            // Clifford algebra is not diagonalizable
+            // notes: a transversal of H in G is a set T such that
+            // HT = G or T^-1 H = G (not necessarily TH = G).
+            // Applying the change of base matrix given by an automorphism
+            // changes the permutation p to p*a.
+            // So p needs to be inverted here.
+            f_pieces := [f meet &meet [bisect(v[i^(p^-1)],v[(i+1)^(p^-1)]:gram:=/*gramL*/DiagonalMatrix(Q,[1] cat [-i: i in cl`consts])): i in [1..#v-1]]: p in Transversal(SymmetricGroup(#v),v_action)] where v is Vertices(f);
+            f_pieces := [x: x in f_pieces|Dimension(x) eq dim-1];
+            cones1 cat:= [Polyhedron(Append([v*g@@to_PG: v in Vertices(m)],zero)): m in f_pieces, g in PG];
+        end for;
+        assert &+[Volume(cone1): cone1 in cones1] eq &+[Volume(cone): cone in cones];
+        assert join_polyhedra(cones1) eq join_polyhedra(cones);
+        PG1,to_PG1 := permutation_action(cones1,units_right);
+        assert forall{orb: orb in Orbits(PG1)|#orb eq #PG1};
+    else
+        PG1 := PG;
+        to_PG1 := to_PG;
+        cones1 := cones;
+    end if;
+
+    // STEP: sort everything.
+    Sorted(~cones1);
+    assert Volume(VC_poly) eq &+[Volume(cone):cone in cones1];
+    assert not exists{c: c in [1..#cones1]|#Stabilizer(PG1,c) gt 1};
+
+    // AML: I don't understand the point of these lines.  Don't we already
+    // have PG1,to_PG1 equal to permutation_action(cones1,units_right)?
+    PG2,to_PG2:=permutation_action(cones1,units_right);
+    orbs := [Sort(i): i in Orbits(PG2)];
+    _,orb_perm := Sort([Min(i): i in orbs],func<x,y|x-y>);
+    orbs:= [orbs[i^orb_perm]: i in [1..#orbs]];
+
+    return cones1,orbs,PG2,to_PG2,PG1,to_PG1,PG,to_PG;
+end intrinsic;
+
+/////////////////////////
+intrinsic spanning_tree(cones1::SeqEnum[TorPol],orbs::SeqEnum)->GrphUnd,GrphVertSet,GrphEdgeSet,GrphUnd
+/////////////////////////
+{For the graph where two orbits of cones are adjacent if and only if there exists two adjacent cells, find a spanning tree of this graph.
+This is used for finding orbit representatives for cells in a fundamental domain.}
+    dim:=Dimension(cones1[1]);
+    
+    function cond(i,j)
+        /*
+        There exists an cone in the jth orbit which meets the first element of the ith orbit in dimension dim-1.
+        This is symmetric so if there also a cone in the ith orbit which meets the first element of the jth orbit.
+        By actions, for every element of the ith orbit there will an element of the jth orbit that meets it and conversely.
+        */
+        C1:=cones1[orbs[i,1]];
+        return exists{k: k in orbs[j]|Dimension( C1 meet cones1[k]) eq dim-1};
+    end function;
+    
+    Gr := Graph<{1..#orbs}|{{i,j}: j in [i+1..#orbs], i in [1..#orbs]|cond(i,j)}>;
+    //Gr;
+    ST,V_ST,E_ST:=SpanningTree(Gr);
+    
+    return ST,V_ST,E_ST,Gr;
+    
+end intrinsic;
+
+/////////////////////////
+intrinsic fundamental_domain_infty_old(O::CliffOrd : include_inv:=false,inv_stable:=true)->SeqEnum[TorPol]
+/////////////////////////
+{return the fundamental domain of the stabilizer of infinity for PSL2(O). This method is known to work when include_inv is false and inv_stable is false. It works in some cases when include_inv is true.
+
+It also has the feature that it loops through all possible additions of cells and tests when two distinct pairs of exterior cells of the refined weakly aligned polytopal complex intersect in the same codimension 2 cell.
+}
+    if include_inv and inv_stable then
+        error "Can't both be stable under inv and have inv as an element of the group";
+    end if;
+    
+    cl:=clifford_algebra(O);
+    inv:=func<x|inversion_inv(cl,x)>;
+    
+    cones1,orbs,PG2,to_PG2,PG1,to_PG1,PG,to_PG:=cones_with_action(O:include_inv:=include_inv,inv_stable:=false);
+    ST,V_ST,E_ST,Gr:=spanning_tree(cones1,orbs);
+    
+    //needed to initialize this
+    dim:=Dimension(cones1[1]);
+
+    if not inv_stable then
+
+        if include_inv then
+            L_tor:=Parent(Vertices(cones1[1])[1]);
+            HS:=HalfspaceToPolyhedron(Dual(L_tor)!vector(cl!1),0);
+            boundary_cones:=[Index(cones1,cone): cone in cones1 | Dimension(HS meet cone) eq dim-1];
+            orbs_and_bc:=[];
+            for i_cone in boundary_cones do
+                orb0:=rep{ orb : orb in orbs | i_cone in orb};
+                Append(~orbs_and_bc,[Index(orbs,orb0),i_cone]);
+            end for;
+            Sort(~orbs_and_bc);
+        else
+            orbs_and_bc:=[];
+        end if;
+
+        procedure get_initial_cone(~seq,~already_tried,~FD1:include_inv:=true,inv_stable:=false)
+            if include_inv and (not inv_stable) then
+                //vprintf Clifford,2: "Do two boundary cones share the same orbit?: %o \n ", exists{ s : s in Subsets(Set(orbs_and_bc),2)| forall{y : y in s | y[1] eq Rep(s)[1]} };
+                k:=1;
+                i_orb0,i_c:=Explode(orbs_and_bc[k]);
+                w:=V_ST.i_orb0;
+
+                while #seq eq 0 do
+                    pair:=<w,i_c>;
+                    if {pair} in already_tried then
+                        k:=k+1;
+                        i_orb0,i_c:=Explode(orbs_and_bc[k]);
+                        w:=V_ST.i_orb0;
+                    else
+                        Append(~seq,pair);
+                    end if;
+
+                    if k gt #orbs_and_bc then
+                        error "We have tried all possible initial orbits";
+                    end if;
+                end while;
+
+                FD1[w] :=cones1[i_c];
+
+            elif (not include_inv) and (not inv_stable) then
+                i:=1;
+                k:=1;
+                w:=V_ST.i;
+                orb:=orbs[Index(w)];
+                i_c:=orb[k];
+                while {<w,i_c>} in already_tried do
+                    if k lt #orb then
+                        k:=k+1;
+                        i_c:=orb[k];
+                    elif k eq #orb then
+                        i:=i+1;
+                        w:=V_ST.i;
+                        orb:=orbs[Index(w)];
+                        k:=1;
+                        i_c:=orb[k];
+                    end if;
+                end while;
+                FD1[w] :=cones1[i_c];
+                Append(~seq,<w,i_c>);
+            end if;
+        end procedure;
+
+        procedure next_cell(~seq,~already_tried,~FD1:include_inv:=true,inv_stable:=false)
+            //orbits adjacent to things in the fundamental domain
+            available:={@ v : v in V_ST | exists{ w: w in Keys(FD1) | w adj v} and not v in Keys(FD1)@};
+            vprintf Clifford, 4: "ADJACENT ORBITS %o \n", #available;
+            i:=0;
+            repeat
+                i:=i+1;
+                FD2:=FD1;
+                w:=available[i];
+
+                //all cones will either be disjoint or intersect on the boundary.
+                //it suffices that there exists some v where the intersection is right.
+                cone_inds:={i : i in orbs[Index(w)] | exists{ v: v in Keys(FD1) | Dimension(cones1[i] meet FD1[v]) eq dim-1}};
+                j:=0;
+                choices:=Sort([i : i in cone_inds]);
+                vprintf Clifford, 4: "ORB %o, CONES: %o \n", w,#choices;
+                repeat
+                    j:=j+1;
+                    i_c:=choices[j];
+                    seq_new:=seq cat [<w,i_c>];
+                    vprintf Clifford, 3: "TRY: %o \n",<w,i_c>;
+                    FD2[w]:=cones1[i_c];
+                    flag0:=is_bad_assoc0(FD2) or (Set(seq_new) in already_tried);
+                    vprintf Clifford, 3: "BAD: %o \n \n", flag0;
+                until (not flag0) or (j eq #choices);
+            until (not flag0) or (i eq #available);
+
+            if (not flag0) then
+                FD1:=FD2;
+                vprintf Clifford,2: "cells: %o/%o \n", #Keys(FD1),#orbs;
+                Append(~seq,<w,i_c>);
+            else
+                //add the current sequence to the bad list
+                Include(~already_tried,Set(seq));
+                v0,j0:=Explode(seq[#seq]);
+
+                //remove the last item from the sequence
+                seq:=seq[1..#seq-1];
+
+                //remove the last part of the fundamental domain
+                FD1_new:=AssociativeArray();
+                for k in Keys(FD1) do
+                    if k ne v0 then
+                        FD1_new[k]:=FD1[k];
+                    end if;
+                end for;
+                FD1:=FD1_new;
+            end if;
+        end procedure;
+
+        FD1:=AssociativeArray();
+        seq:=[];
+        already_tried:={};
+        
+        /*
+        
+            MAIN LOOP
+        
+        */
+
+        if #orbs eq 1 then
+            vprintf Clifford, 4: "There is a single orbit. \n";
+            assert #PG eq #orbs[1];
+        else
+            vprintf Clifford, 4: "STEP: pick a starting cone.\n";
+            get_initial_cone(~seq,~already_tried,~FD1:include_inv:=include_inv,inv_stable:=inv_stable);
+
+            while #Keys(FD1) lt #V_ST do
+                if #seq gt 0 then
+                    next_cell(~seq,~already_tried,~FD1:include_inv:=include_inv,inv_stable:=inv_stable);
+                else
+                    get_initial_cone(~seq,~already_tried,~FD1:include_inv:=include_inv,inv_stable:=inv_stable);
+                end if;
+            end while;
+        end if;
+
+        FD:=[ FD1[k] : k in Keys(FD1)];
+        return FD;
+    
+    elif inv_stable then
+        FD0:=fundamental_domain_infty_old(O:include_inv:=true,inv_stable:=false);
+        FD00:=FD0 cat [inv(D) : D in FD0];
+        return FD00;
+    end if;
+end intrinsic;
+
+function is_bad_pair(c1,c2)
+  if exists(pair){[f1,f2]: f1 in Facets(c1), f2 in Facets(c2)|Dimension(f1 meet f2) eq Dimension(f1) and f1 ne f2} then
+    return true, pair;
+  else return false,[];
+  end if;
+end function;
+
+/*
+intrinsic limited_shred(cones::Setq[TorPol],pg::GrpPerm,unit_gp::GrpMat)->SetIndx[TorPol]
+{Try to shred in a more efficient way, while maintaining G-invariance.  This shouldn't really be used; for one thing, it doesn't keep track of the G-invariance.}
+  cones := [x: x in cones];
+  bad_pairs := {@@};
+  dim := Dimension(cones[1])-1;
+  for i in Subsets({1..#cones},2) do
+    ib,p := is_bad_pair(cones[Min(i)],cones[Max(i)]);
+    if ib then Include(~bad_pairs,<Sort(Setseq(i)),p>);
+    end if;
+  end for;
+  
+  while #bad_pairs gt 0 do
+    pair := bad_pairs[1];
+    // find a facet of one that cuts through the interior of the other one
+    bad_codim_2s := {@<c,i>: c in Facets(pair[2,i]), i in [1,2]|forall{f: f in Facets(pair[2,3-i])|Dimension(c meet f) le Dimension(c)-1}@};
+    // find the other facet containing it, which we can use to slice
+    other_facets := [rep{x: x in Facets(cones[pair[1,bc[2]]])|x ne pair[2,bc[2]] and bc[1] in Facets(x)}: bc in bad_codim_2s];
+    vs := [{@<s*Dual(tl)!v,s*&+[v[i]*Eltseq(vs[1])[i]: i in [1..dim]]> where v is Kernel(Transpose(Matrix([v-vs[1]: v in vs]))).1 where vs is Vertices(of): s in [1,-1]@}: of in other_facets];
+    // or does this always work?
+    good_ind := rep{i: i in [1..#vs]|forall{d: d in vs[i]|Dimension(HalfspaceToPolyhedron(d[1],d[2]) meet pair[2,3-bad_codim_2s[i,2]]) lt dim}};
+    bd := bad_codim_2s[good_ind];
+    of := other_facets[good_ind];
+    v := vs[good_ind];
+
+    halves := [HalfspaceToPolyhedron(i[1],i[2]) meet pair[2,3-bd[2]]: i in v];
+    // need to keep track of the action as well
+    ind_gone := pair[1,3-bd[2]];
+    Remove(~cones,ind_gone);
+    cones cat:= halves;
+    new_pairs := {@@};
+    for p in bad_pairs[2..#bad_pairs] do
+      if ind_gone notin p[1] then
+        Include(~new_pairs,<[i-(i gt ind_gone select 1 else 0): i in p[1]],p[2]>);
+      else
+        other_ind := rep{x-(x gt ind_gone select 1 else 0): x in p[1]|x ne ind_gone};
+        for i in [1,2] do
+          inew,pnew := is_bad_pair(cones[other_ind],cones[#cones-2+i]);
+          if inew then Include(~new_pairs,<[other_ind,#cones-2+i],pnew>); end if;
+        end for;
+      end if;
+    end for;
+    bad_pairs := new_pairs;
+  end while;
+
+  return cones;
+end intrinsic;
+*/
+
+// Single step in reassembling.  We put it in its own function so that if
+// something goes wrong along the way we can easily drop it and return to
+// where we were before.
+
+function try_to_join(cones,facets,f,join1,todo,units)
+  id := rep{x: x in units|Order(x) eq 1};
+  // if things go badly, we don't join anything, but only get rid of
+  // the facet along which we tried to join and its orbit
+  cones0 := cones; facets0 := facets; todo0 := todo diff {@f*i: i in units@};
+  join_set := {@f@};
+  new_cones := {@join1@};
+  // If we join two facets to a single facet, we need to join their neighbours,
+  // if they have them.
+  joined_facets := {@<x,[x meet i: i in facets[f]],facets[f]>: x in Facets(join1)|forall{i: i in facets[f]|x notin Facets(i)}@};
+  used_facets := {@@};
+  vprint Clifford, 3: "trying to join", #joined_facets, "facet(s)";
+  while #joined_facets gt 0 do
+    jf := joined_facets[1];
+    joined_facets := joined_facets[2..#joined_facets];
+    Include(~used_facets,jf);
+    // we try to find two facets that are on the other sides of the ones
+    // to be joined.
+    vprint Clifford, 4: "  finding the facets opposite the components";
+    opposites := {@x: x in facets[jf[2,i]], i in [1,2]|x ne jf[3,i]@};
+    // if there are none, we're at the boundary and everything is fine.
+    // if there is only one, the join fails: we would create a non-aligned
+    // collection of polytopes.
+    if #opposites eq 0 then
+      vprint Clifford, 4: "  none found, nothing to do";
+    elif #opposites eq 1 then
+      vprint Clifford, 4: "  only one; joining would break the alignment.";  
+      return cones0, facets0, todo0;
+    elif #opposites eq 2 then
+      // In this case, we have to try to join the ones on the other side
+      // as well.  If they belong to the same orbit, we can't do that.
+      vprint Clifford, 3: "  found two, attempting to join them";
+      if exists{u: u in units|opposites[1]*u eq opposites[2]} then
+        // as before, this is a failure
+        vprint Clifford, 4: "    failed, they are in the same orbit";
+        return cones0, facets0, todo0;
+      end if;
+      // likewise, if they don't share a facet, we can't do that either.
+      if exists(shared){x: x in Facets(opposites[1])|x in Facets(opposites[2])} then
+        assert {@x: x in facets[shared]@} eq opposites;
+        new_join := Polytope(&cat [Vertices(i): i in opposites]);
+        if Volume(new_join) ne &+[Volume(i): i in opposites] then
+          vprint Clifford, 4: "    failed, the union is not convex";
+          return cones0, facets0, todo0;
+        end if;
+        Include(~join_set,shared);
+        Include(~new_cones,new_join);
+        new_joins := {@<x,[x meet i: i in facets[shared]],facets[shared]>: x in Facets(new_join)|x ne jf[1] and forall{i: i in facets[shared]|x notin Facets(i)}@};
+          vprint Clifford, 3: "    joining them and adding", #new_joins, "pair(s) of faces to the list of things to join";
+        joined_facets join:= {@x: x in new_joins|x notin used_facets@};
+      else
+        vprint Clifford, 4: "    failed, they don't share a facet";
+        return cones0, facets0, todo0;
+      end if;
+    end if; // #opposites
+  end while;
+
+  // now we let G act on everything and recreate the sets.
+  vprint Clifford, 3: "  success, combining the cones and updating the todo list";
+  join_orbs := {@x*y: x in join_set, y in units@};
+  // assert join_orbs subset todo;
+  todo diff:= join_orbs;
+  join_cones := {@x*y: x in new_cones, y in units@};
+  assert forall{j: j in join_cones|#{j*y: y in units} eq #units};
+  // this used to assert that #join_cones eq #new_cones*#units
+  // but it could happen that they're in the same orbit
+  removed_cones := {@x*y: x in facets[j], j in join_set, y in units@};
+  cones diff:= removed_cones;
+  cones join:= join_cones;
+  for j in join_cones, f in Facets(j) do
+    if f notin Keys(facets) then
+      facets[f] := [j];
+    else
+      Append(~facets[f],j);
+    end if;
+  end for;
+  
+  for r in removed_cones, f in Facets(r) do
+    Exclude(~facets[f],r);
+    if #facets[f] eq 0 then
+      Remove(~facets,f);
+      // not sure why these aren't removed above
+      todo diff:= {@f@};
+    end if;
+  end for;
+
+  return cones, facets, todo;
+end function;
+
+intrinsic reassemble(cones::Setq[TorPol],units::GrpMat) -> SetIndx[TorPol]
+{Given the result of shredding, try to reassemble into a less refined partition that is still aligned and units-invariant.}
+  id := rep{x: x in units|Order(x) eq 1};
+  cones := {@x: x in cones@};
+  vprint Clifford, 2: "building initial array of facets";
+  facets := AssociativeArray();
+  all_facets := {x: x in Facets(c), c in cones};
+  for f in all_facets do facets[f] := []; end for;
+  for c in cones, f in Facets(c) do
+    Append(~facets[f],c);
+  end for;
+  
+  todo := {@x: x in Keys(facets)|#facets[x] eq 2@};
+  while #todo gt 0 do
+    vprint Clifford, 2: "next step in reassembling:", #cones, "cones,", #facets, "facets,", #todo, "left to do";
+    f := todo[1];
+    forb := {@f*i: i in units@};
+    assert forb subset todo;
+    join1 := Polytope(&cat [Vertices(i): i in facets[f]]);
+    if Volume(join1) ne &+[Volume(i): i in facets[f]] or exists{u: u in units|facets[f,1]*u eq facets[f,2]} then
+      // failure: we would get some nonconvex thing by joining them, or they
+      // are in the same orbit.
+      vprint Clifford, 3: "can't join these, on to the next one";
+      todo diff:= forb;
+      continue;
+    else
+      cones, facets, todo := try_to_join(cones,facets,f,join1,todo,units);
+    end if;
+  end while;
+
+  vprint Clifford, 2: "done";
+  return cones;
+end intrinsic;
+
+/////////////////////////
+intrinsic shred(cones::Setq[TorPol])->SetIndx[TorPol]
+/////////////////////////
+{Subdivide a collection of TorPol cones along all hyperplanes containing a facet of any of them}
+  dim := Dimension(cones[1]);
+  tl := Universe(Vertices(cones[1]));
+  half_spaces := {@@};
+  hyps := {@@};
+  vol := &+[Volume(i): i in cones];
+  vprint Clifford, 2: "making list of hyperplanes";
+  for c in cones, f in Facets(c) do
+    vs := {@<s*Dual(tl)!v,s*&+[v[i]*Eltseq(Vertices(f)[1])[i]: i in [1..dim]]> where v is Kernel(Transpose(Matrix([v-vs[1]: v in vs]))).1 where vs is Vertices(f): s in [1,-1]@};
+    Include(~hyps,vs);
+  end for;
+  vprintf Clifford, 3: "found %o hyperplanes, subdividing\n", #hyps;
+  half_spaces := {@{@<HalfspaceToPolyhedron(v[1],v[2]),v[1],v[2]>: v in vs@}: vs in hyps@};
+  for hs in half_spaces do
+    cones := {@x meet h[1]: x in cones, h in hs|Dimension(x meet h[1]) eq dim@};
+    assert &+[Volume(i): i in cones] eq vol;
+    vprintf Clifford, 4: ".";
+  end for;
+  vprintf Clifford, 4: "\n";
+  // vprint Clifford, 2: "checking that we're done";
+  // i.e., no further subdivision is necessary
+  // AML: I believe this now; since it takes time, I commented it out
+  // assert forall{c: c in cones, h in half_spaces|#[x: x in h|Dimension(c meet x[1]) eq dim] eq 1};
+  // we could also check that there are no new half-spaces
+  return cones;
+end intrinsic;
+
+
+////////////////////
+function is_bad(FD)
+////////////////////
+  all_facets:=&cat[Facets(D) : D in FD];
+  sides:=[x : x in all_facets | Multiplicity(all_facets,x) eq 1];
+  Sorted(~sides);
+  adjacent_pairs:=[ [i,j] : i in [1..#sides], j in [1..#sides] | i lt j and Dimension(sides[i] meet sides[j]) eq Dimension(sides[i])-1];
+  vprint Clifford, 2: "checking that the decomposition is well-behaved";
+  if exists(pairs){ [pair1,pair2] : pair1 in adjacent_pairs, pair2 in adjacent_pairs | pair1 lt pair2 and (sides[pair1[1]] meet sides[pair1[2]]) eq (sides[pair2[1]] meet sides[pair2[2]])} then
+    return true, pairs;
+  else
+    return false;
+  end if;
+end function;
+
+//-----
+function fd_inf_setup(L,O: include_inv := false)
+//-----
+  units_right:=units_matrix_group(O: action:="right",include_inv:=include_inv);
+  gramL:=ChangeRing(GramMatrix(L),Q);
+
+  error if exists{l: l in Basis(L), g in Generators(units_right)|Vector(BaseRing(g),Eltseq(l))*g notin L}, "group does not act on lattice";
+
+  VC,stuff,VC_vecs:=VoronoiCell(L);
+  VC_poly:=Polyhedron([Eltseq(f): f in VC]);
+  dim:=Rank(L);
+  facets := Faces(VC_poly)[dim];
+  L_tor:=Parent(Vertices(VC_poly)[1]);
+  return units_right, gramL, VC, stuff, VC_vecs, VC_poly, dim, facets, L_tor;
+end function;
+
+/*
+TD: we need to talk about break_cones and break_by_distances. They have pretty different looking signatures.
+*/
+
+
+//-----
+function break_cones(cones,units_right,L_tor,cl,dim,inv)
+//-----
+  HSL := HalfspaceToPolyhedron(Dual(L_tor)!vector(cl!1),0);
+  HSR := HSL*inv_matrix(cl);
+  cones := {@x: x in cones@};
+  while exists(br){c: c in cones|Dimension(c meet inv(c)) eq dim} do
+    orb := {@br*g: g in units_right@};
+    assert orb subset cones;
+    broken_orb := {@(br meet i)*g: g in units_right, i in [HSL,HSR]@};
+    cones diff:= orb;
+    cones join:= broken_orb;
+  end while;
+  return cones;
+end function;
+
+// Break up a collection of cones by replacing each cone by the union of
+// at most (#vertices)! cones according to the orders of the distances to
+// the vertices.  The reason to do this is that each of the components will
+// have trivial stabilizer.  But obviously if the number of vertices is large
+// this will be impractical.
+
+function break_by_distances(cones,PG,to_PG,facets1,cl,zero)
+  orbs := Orbits(PG);
+  dim := Dimension(cones[1]);
+  cones1 := {@@};
+  for orb in orbs do
+    // The comments suggest that we only partition the cones with nontrivial
+    // stabilizer.  In order to do that we should skip this when #orb eq #PG.
+    elt:=Rep(orb);
+    f := facets1[elt]; //old cone is the hull of the vertices of facet and zero
+    stab_f := Stabilizer(PG,Rep(orb));
+    v_action := PermutationGroup<#vs|[[Index(vs,Vector(v)*ChangeRing(i@@to_PG,Q)): v in vs]: i in Generators(stab_f)]> where vs is Vertices(f);
+    // this won't work if the quadratic form defining the
+    // Clifford algebra is not diagonalizable
+    // notes: a transversal of H in G is a set T such that
+    // HT = G or T^-1 H = G (not necessarily TH = G).
+    // Applying the change of base matrix given by an automorphism
+    // changes the permutation p to p*a.
+    // So p needs to be inverted here.
+    f_pieces := [f meet &meet [bisect(v[i^(p^-1)],v[(i+1)^(p^-1)]:gram:=/*gramL*/DiagonalMatrix(Q,[1] cat [-i: i in cl`consts])): i in [1..#v-1]]: p in Transversal(SymmetricGroup(#v),v_action)] where v is Vertices(f);
+    f_pieces := [x: x in f_pieces|Dimension(x) eq dim-1];
+    cones1 join:= {@Polyhedron(Append([v*g@@to_PG: v in Vertices(m)],zero)): m in f_pieces, g in PG@};
+  end for;
+  return cones1;
+end function;
+
+// AML: I did some refactoring (see functions above).
+/* Example of usage:
+AttachSpec("hecke.spec");
+O := get_maximal_orders(clifford_algebra(Q,[-1,-1]))[1];
+_ := shredded_fd_infty(O:include_inv := false, inv_stable := true);
+_ := shredded_fd_infty(O:include_inv := false, inv_stable := false);
+_ := shredded_fd_infty(O:include_inv := true, inv_stable := false);
+Cputime(); // on my computer, under 30 seconds
+Keys(O`fundamental_domain_infty); // all but [true,true], as expected
+*/
+
+/////////////////////////
+// AML: this should be merged with cones_with_action.  The main differences
+// are that this one has a different (better?) way to break up according
+// to inversion and that cones_with_action does another calculation of orbits
+// at the end.  If that is really necessary it could be moved back into
+// fundamental_domain_infty_old.
+/////////////////////////
+intrinsic cones_action_2(O::CliffOrd:include_inv:=true,inv_stable:=false)->SeqEnum[TorPol],GrpPerm,Map,GrpPerm,Map
+/////////////////////////
+{Given a Clifford order, return a partition of the Voronoi cell for the lattice of Clifford vectors into cones with its right permutation action by the Clifford units of the order by conjugation.}
+  // AML: most of this is copied from fundamental_domain_infty.
+  cl:=clifford_algebra(O);
+  inv:=func<x|inversion_inv(cl,x)>;
+  L:=vec(O:small:=true);
+  units_right, gramL, VC, stuff, VC_vecs, VC_poly, dim, facets, L_tor := fd_inf_setup(L,O: include_inv := include_inv);
+  HSL := HalfspaceToPolyhedron(Dual(L_tor)!vector(cl!1),0);
+  vprintf Clifford, 3: "STEP: break up the Voronoi cell according to cones for each facet.\n";
+  
+  zero := L_tor!0;
+  cones := {@Polyhedron(Append(Vertices(i),zero)): i in facets@};
+  Sorted(~cones);
+  assert aligned(cones);
+  
+  // we now break up the ones that are invariant.
+  //The cones that are bad are the ones that are invariant.
+  cones_bad:= {@c: c in cones|Dimension(c meet inv(c)) ge dim@};
+  cones_invariant:= {@c: c in cones|c eq inv(c)@};
+  assert cones_bad eq cones_invariant;
+  
+  vprintf Clifford,3: "STEP: break up invariant cones.\n";
+  vprintf Clifford,3 : "Number of bad cones: %o (STEP: Break them down) \n", #cones_bad;
+  broken_cones := break_cones(cones,units_right,L_tor,cl,dim,inv);
+  assert forall{c: c in broken_cones|Dimension(c meet inv(c)) lt dim};
+  assert broken_cones eq {@inv(c): c in broken_cones@};
+
+  //The breaking was successful
+  //TAD: This fails for first maximal order of [-1,-3], passes for the first maximal of [-1,-2].
+  //Q: Is this because join_polyhedra is making a convex thing.
+  //A: No, VC_poly is the voronoi cell. This is always a convex polyhedron and the union of its cones.
+
+  cones := broken_cones;
+  assert join_polyhedra(cones) eq VC_poly;
+  //Volume(VC_poly);
+  //&+[Volume(cone):cone in cones];
+  //[Volume(cone):cone in cones];
+  assert Volume(VC_poly) eq &+[Volume(cone):cone in cones];
+  assert aligned(cones);
+  
+  //STEP: break the facets corresponding to the cones
+  
+  facets := Faces(VC_poly)[dim];
+  facets1:={cone meet face : face in facets, cone in cones| Dimension(cone meet face) eq dim-1};
+  facets1:=Sorted([face:face in facets1]);
+  
+  //STEP: for the action of the matrix group on the cones.
+
+  PG,to_PG := permutation_action(facets1,units_right);
+  //STEP: partition the cones which have non-trivial stabilizers
+  if exists{c: c in [1..#cones]|#Stabilizer(PG,c) gt 1} then
+    vprintf Clifford, 3: "STEP: There are cones which have nontrivial stabilizers. More chopping. \n";
+    cones1 := break_by_distances(cones,PG,to_PG,facets1,cl,zero);
+    //s := (dim mod 2)+2;
+    assert &+[Volume(cone1): cone1 in cones1] eq &+[Volume(cone): cone in cones];
+    assert join_polyhedra(cones1) eq join_polyhedra(cones);
+    PG1,to_PG1 := permutation_action(cones1,units_right);
+  else
+    PG1 := PG;
+    to_PG1 := to_PG;
+    cones1 := cones;
+  end if;
+  assert forall{orb: orb in Orbits(PG1)|#orb eq #PG1};
+
+  return cones1,PG1,to_PG1,PG,to_PG;
+end intrinsic;
+
+/////////////////////////
+intrinsic shredded_fd_infty(O::CliffOrd:include_inv:=false, inv_stable:=true,redo := false, use_reassemble := false)->SeqEnum[TorPol],.
+/////////////////////////
+{Another intrinsic to get a fundamental domain for the stabilizer of infinity, which might be better behaved than the one produced by fundamental_domain_infinity.}
+  //--------------------------------------
+  if include_inv and inv_stable then //[include_inv,inv_stable]=[true,true]
+    error "We can't both make the fundamental domain stable under x -> -bar(x) and have that as an element of our group.";
+  end if;
+
+  if not assigned O`fundamental_domain_infty then
+    O`fundamental_domain_infty:=AssociativeArray();
+  end if;
+  
+  /*
+    The keys of O`fundamental_domain_infty are [include_inv,inv_stable].
+ */
+  cl:=clifford_algebra(O);
+  inv:=func<x|inversion_inv(cl,x)>;
+
+  if not [include_inv,inv_stable] in Keys(O`fundamental_domain_infty) or redo then
+    //--------------------------------------
+    L:=vec(O:small:=true);
+    units_right, gramL, VC, stuff, VC_vecs, VC_poly, dim, facets, L_tor := fd_inf_setup(L,O: include_inv := include_inv);
+    cones1,PG1,to_PG1,PG,to_PG := cones_action_2(O:include_inv := include_inv, inv_stable := inv_stable);
+    
+    // cones2 := limited_shred(cones1,PG1,units_right);
+    cones2 := shred(cones1);
+    cones3 := cones2;
+    if use_reassemble then
+      repeat
+        nc := #cones3;
+        cones3 := reassemble(cones3,units_right);
+      until #cones3 eq nc;
+    end if;
+    
+    PG3,to_PG3 := permutation_action(cones3,units_right);
+    orbs3 := Orbits(PG3);
+    assert forall{x: x in orbs3|#x eq #PG3};
+    if inv_stable then
+      // is it a problem that this now fails when not inv_stable?
+      assert cones3 eq {@inv(c): c in cones3@};
+      inv_gp := PermutationGroup<#cones3|[Index(cones3,inv(c)): c in cones3]>;
+      fd := join_aligned(cones3,orbs3,inv_gp: start := rep{x: x in [1..#cones3]|Dimension(cones3[x] meet inv(cones3[x])) eq Dimension(cones3[x])-1});
+      fd_total := {@x: x in fd@} join {@inv(x): x in fd@};
+      assert not is_bad(fd_total);
+      assert forall{c: c in fd_total, u in units_right|u eq Identity(Parent(u)) or c*u ne c};
+      O`fundamental_domain_infty[[include_inv,inv_stable]] := fd_total;
+    else
+      inv_gp := PermutationGroup<#cones3|>;
+      fd := join_aligned(cones3,orbs3,inv_gp);
+      assert not is_bad(fd);
+      O`fundamental_domain_infty[[include_inv,inv_stable]] := fd;
+    end if;
+  end if;
+  return O`fundamental_domain_infty[[include_inv,inv_stable]];
+end intrinsic;
+
+intrinsic dirichlet_fd(O::CliffOrd:include_inv := false, inv_stable := true, redo := false) -> SeqEnum[TorPol],.
+{Uses Dirichlet's idea of taking the points that are closest to a given point under an invariant metric.}
+  if include_inv and inv_stable then //[include_inv,inv_stable]=[true,true]
+    error "We can't both make the fundamental domain stable under x -> -bar(x) and have that as an element of our group.";
+  end if;
+
+  if not assigned O`fundamental_domain_infty then
+    O`fundamental_domain_infty:=AssociativeArray();
+  end if;
+  
+  /*
+    The keys of O`fundamental_domain_infty are [include_inv,inv_stable].
+ */
+  cl:=clifford_algebra(O);
+  inv:=func<x|inversion_inv(cl,x)>;
+
+  if not [include_inv,inv_stable] in Keys(O`fundamental_domain_infty) or redo then
+    //--------------------------------------
+    L:=vec(O:small:=true);
+    // if inv_stable is true, we include the inversion in our unit group,
+    // to make things easier for ourselves later.
+    vprint Clifford, 4: "computing unit group and Voronoi cell";
+    units_right, gramL, VC, stuff, VC_vecs, VC_poly, dim, facets, L_tor := fd_inf_setup(L,O: include_inv := include_inv or inv_stable);
+    if include_inv or inv_stable then
+      inv_mat := rep{x: x in units_right|(v*x eq -v where v is Vector(Q,[1,0^^(dim-1)])) and <1,dim-1> in Roots(CharacteristicPolynomial(x))};
+      // not sure what to do if this fails
+      assert VC_poly*inv_mat eq VC_poly;
+    end if;
+    
+    // we now take the points in the Voronoi cell that are closer to a given
+    // point than to any of its images.
+    vprint Clifford, 4: "checking invariance of the inner product";
+    ip := InnerProductMatrix(L);
+    assert forall{i: i in units_right|i*gip*Transpose(i) eq gip} where gip is GL(dim,Q)!ip;
+    dim := Dimension(L);
+    Qn := VectorSpace(Q,dim);
+    // now we choose a point in a deterministic way
+    pol := PolynomialRing(Q,#VC);
+    deg := 0; found := false;
+    vprint Clifford, 4: "finding a general point in the Voronoi cell";
+    repeat
+      for m in MonomialsOfDegree(pol,deg) do
+        vec := [Degree(m,i)+1: i in [1..#VC]];
+        pt := &+[vec[i]*Vertices(VC_poly)[i]: i in [1..#VC]]/&+vec;
+        if #{pt*i: i in units_right} eq #units_right then
+          found := true;
+          break m;
+        end if;
+      end for;
+      deg +:= 1;
+    until found;
+    
+    assert pt in VC_poly;
+    // now we make the linear conditions
+    Qf := FunctionField(Q,dim);
+    Qfn := VectorSpace(Qf,dim,ChangeRing(ip,Qf));
+    genpt := Qfn![Qf.i: i in [1..dim]];
+    pt_qfn_tr := [Qfn!Eltseq(pt*i): i in units_right];
+    dists := [Norm(genpt-i): i in pt_qfn_tr];
+    vprint Clifford, 4: "finding the conditions to be closest to it";
+    closest_conds := [Numerator(d-dists[1]): d in dists[2..#dists]];
+    closest_halfspaces := [HalfspaceToPolyhedron([MonomialCoefficient(Numerator(i),Numerator(Qf.j)): j in [1..dim]],0): i in closest_conds];
+
+    fd_dirichlet := VC_poly;
+    for i in closest_halfspaces do fd_dirichlet meet:= i; end for;
+    assert Volume(fd_dirichlet)*#units_right eq Volume(VC_poly);
+    assert forall{u: u in units_right|((u eq Identity(units_right) or Dimension(fd_dirichlet meet fdu) lt dim) and fdu meet VC_poly eq fdu) where fdu is fd_dirichlet*u};
+    // This is a fundamental domain.  However, when inversion is involved,
+    // things will go better if we translate it to have a face along the
+    // inversion hyperplane.  Otherwise I (AML) see no reason to choose any
+    // one unit image rather than any other.    
+    if include_inv or inv_stable then
+      fd_dirichlet := rep{fd_dirichlet*u: u in units_right|exists{f: f in Facets(fd_dirichlet*u)|f in Facets(fd_dirichlet*u*inv_mat)}};
+    end if;
+    vprint Clifford, 3: "found fundamental domain, refining it";
+    // now, this is a fundamental domain, and it is not fixed by any of the
+    // units other than 1 since u takes it to the points closest to the base
+    // point times u.
+
+    // However, it may fail to be aligned with its translates, so we may need
+    // to subdivide.  I think it is always aligned with its images by units.
+
+    // Actually, I'm a bit confused about this; once when I ran it further
+    // subdivision was necessary, but not the other times.  Maybe it was
+    // an artifact of doing something wrong and the following is not needed.
+    vprint Clifford, 3: "finding the copies that meet along a facet";
+    fd_units := {@<fd_dirichlet*i,i>: i in units_right@};
+    possible_trs := {@x-y: x in Vertices(fd_dirichlet), y in Vertices(u[1]), u in fd_units@};
+    trs := {@x: x in possible_trs|IsCoercible(L,Eltseq(x))@};
+    tr_polys := [Polytope([Eltseq(i)]): i in trs];
+    // could check that none of these meets fd_dirichlet in maximal dimension
+    needed_trs := {@<x[1]+y,x[2],y>: x in fd_units, y in tr_polys|Dimension((x[1]+y) meet fd_dirichlet) eq dim-1@};
+    vprint Clifford, 3: "finding the necessary cutting hyperplanes for alignment";
+    cutting_facets := {@@};
+    for i in needed_trs do
+      pair := [i[1],fd_dirichlet];
+      i_meet_fd := &meet pair;
+      facets_j := [rep{x: x in Facets(j)|x meet i_meet_fd eq i_meet_fd}: j in pair];
+      for j in [1,2] do
+        neighbours_j := {@x: x in Facets(pair[j])|Dimension(x meet facets_j[j]) eq dim-2@};
+        assert #neighbours_j eq #Facets(facets_j[j]);
+        new_cutting_facets := {@x: x in neighbours_j|forall{f: f in Facets(facets_j[3-j])|Dimension(x meet f) lt dim-2} and Dimension(x meet facets_j[3-j]) eq dim-2@};
+        assert i_meet_fd notin Facets(pair[3-j]) or #new_cutting_facets eq 0;
+        cutting_facets join:= new_cutting_facets;
+        /*if i_meet_fd notin Facets(j) then
+          new_cutting_facets := {@x: x in Facets(j)|Dimension(i_meet_fd meet x) eq dim-2 and i_meet_fd meet x in Facets(i_meet_fd) and facet_j meet x notin Facets(facet_j)@};
+          assert forall{f: f in new_cutting_facets|f meet i_meet_fd in Facets(i_meet_fd)};
+          cutting_facets join:= new_cutting_facets;
+        end if;*/
+      end for;
+    end for;
+    // now we need to convert these into hyperplanes and use them to cut the
+    // fundamental domain.
+    hyperplanes := {@@};
+    // we should also use the images of the hyperplanes by the units
+    cutting_facets := {@x*u: x in cutting_facets, u in units_right@};
+    vprint Clifford, 3: "cutting along", #cutting_facets, "hyperplanes";
+    for c in cutting_facets do
+      ker := Kernel(Transpose(Matrix([Eltseq(i-v[1]): i in v]))) where v is Vertices(c);
+      assert Dimension(ker) eq 1;
+      val := {@&+[(ker.1)[i]*Eltseq(v)[i]: i in [1..dim]]: v in Vertices(c)@};
+      assert #val eq 1;
+      Include(~hyperplanes,<Eltseq(ker.1),Rep(val)>);
+    end for;
+    
+    fd_pieces := {@fd_dirichlet@};
+    for h in hyperplanes do
+      hs := [HalfspaceToPolyhedron([s*i: i in h[1]],s*h[2]): s in [1,-1]];
+      fd_pieces := {@x meet h: x in fd_pieces, h in hs|Dimension(x meet h) eq dim@};
+    end for;
+
+    // error checking: make sure we have a subdivision
+    vprint Clifford, 3: "error checking";
+    fd_facets := {*x: x in Facets(i), i in fd_pieces*};
+    assert forall{x: x in fd_facets|Multiplicity(fd_facets,x) eq 2 or (Multiplicity(fd_facets,x) eq 1 and exists{f: f in Facets(fd_dirichlet)|f meet x eq x})};
+    assert &+[Volume(i): i in fd_pieces] eq Volume(fd_dirichlet);
+    
+    fd_tr := {@x*t[2]+t[3]: x in fd_pieces, t in needed_trs@};
+
+    inner := {@x: x in fd_facets|Multiplicity(fd_facets,x) eq 2@};
+    outer := {@x: x in fd_facets|Multiplicity(fd_facets,x) eq 1@};
+    assert #outer+2*#inner eq #fd_facets;
+    assert forall{i: i in outer|exists{f: f in fd_tr|i in Facets(f)}};
+
+    // now take care of the inversion
+    if inv_stable then
+      // everything was aligned before, so it still is.
+      fd_pieces join:= {@x*inv_mat: x in fd_pieces@};
+    end if;
+
+    assert Volume(join_polyhedra(fd_pieces)) eq &+[Volume(i): i in fd_pieces];
+
+    O`fundamental_domain_infty[[include_inv,inv_stable]] := fd_pieces;
+  end if;
+
+  return O`fundamental_domain_infty[[include_inv,inv_stable]];
+end intrinsic;
+
+// AML: I think this intrinsic is getting too long and should be factored
+// into some smaller ones
+////////////////////
+intrinsic fundamental_domain_infty(O::CliffOrd:include_inv:=false, inv_stable:=true,redo := false)->SeqEnum[TorPol],.
+////////////////////
+{
+Get the fundamental domain for the stabilizer of infinity under PSL2(O). The option include_inv creates a fundamental domain for extension Stab(PSL2(O),infty) by the map x->-bar(x). The option inv_stable makes a fundamental domain for Stab(PSL2(O),infty) which is invariant under x -> -bar(x). This is important for modular symbols algorithms. By default, include_inv:=false and inv_stable:=true. NOTE:  [include_inv,inv_stable]:=[true,true] is not valid.
+}
+    
+    //--------------------------------------
+    if include_inv and inv_stable then //[include_inv,inv_stable]=[true,true]
+        error "We can't make the fundamental domain both stable under x->-bar(x) and have that as an element of our group.";
+    end if;
+
+    if not assigned O`fundamental_domain_infty or redo then
+        O`fundamental_domain_infty:=AssociativeArray();
+    end if;
+    
+    /*
+    The keys of O`fundamental_domain_infty are [include_inv,inv_stable].
+    */
+    
+    cl:=clifford_algebra(O);
+    inv:=func<x|inversion_inv(cl,x)>;
+
+    if not [include_inv,inv_stable] in Keys(O`fundamental_domain_infty) or redo then
+    
+        if inv_stable then
+        
+            O`fundamental_domain_infty[[include_inv,inv_stable]]:=dirichlet_fd(O:inv_stable:=true,include_inv:=false);
+        
+        elif include_inv then
+            
+            FD:=shredded_fd_infty(O :include_inv:=true, inv_stable:=false);
+            O`fundamental_domain_infty[[include_inv,inv_stable]]:=FD;
+        
+        elif not include_inv then
+        
+            FD:=fundamental_domain_infty_old(O : include_inv:=false,inv_stable:=false);
+            O`fundamental_domain_infty[[include_inv,inv_stable]]:=FD;
+        
+        end if;
+        
+    end if;
+        
+    return O`fundamental_domain_infty[[include_inv,inv_stable]];
+
+end intrinsic;
+
+
+/*
+TD: I want to say a little bit about convexity here.
+Since we are taking a union of cones, the convexity is determined by the behavior at the boundary; this means that we take the Voronoi cell and intersect it with each of the cells to get the facets on the boundary -- I will call this the Voronoi boundary. The union of these facets projected to the sphere will give some subset of the sphere. If this is geodesically convex then the underlying union of cones will be convex. Another way to view this: for every path, one can take the projection of the path to the sphere.
+
+A failure of convexity would mean that there exits some tile of the Voronoi boundary which does not have any of its neighbors. I think this means the spanning tree needs to be replaced with another algorithm. I would propose that we eliminate orbits and prioritize as follows.
+
+The procedure is inductive. Let BFD0 be the cells that are already included.
+--only cells which have no representative orbit are included.
+--cell1 is better than cell2 if it is adjacent to more cells in BFD0.
+--cell1 is better than cell2 if cell1 is adjacent to x0=0.
+
+*/
+
+
+////////////////////
+intrinsic side_pairing_infty(O::CliffOrd,FD::Setq[TorPol]: redo := false, include_inv:=false)->Assoc
+////////////////////
+{Given an order in a Clifford algebra and the fundamental domain for the stabilizer of infinity, return an associative array which for each facet f1 of the fundamental domain returns <g,f2>. The g is the "step" across the facet f1. That is g(fundamental_domain) meet fundamental_domain is f1. The facet f2 is what you get from pulling back the intersection to the original fundamental domain. We always have f1=g*f2 since f2 = (g^-1)*f1.
+}
+    if include_inv then
+        error "not implemented for include_inv eq true. See intrinsic side_pairing_infty with signature CliffOrd,Setq[TorPol] in package-fundamental-domains.mag (which was on line 1671 when writing this).";
+    end if;
+    
+    cl:=clifford_algebra(O);
+    inv:=func<x|inversion_inv(cl,x)>;
+    inv_stable:=forall{ D : D in FD | inv(D) in FD };
+
+    if redo or not assigned O`side_pair_infty then
+        L:=vec(O:small:=true);
+        
+        dim:=Rank(L);
+        v_cell,stuff,VC_vecs:=VoronoiCell(L);
+        lattice_points:=[L!v : v in VC_vecs];
+        translators:=[O!clifford_vector(cl,t) : t in lattice_points cat [L!0]];
+
+        v_cell_poly := Polyhedron([Eltseq(x): x in VoronoiCell(L)]);
+        // AML: I think this assumes that include_inv was false when the
+        // fundamental domain was calculated.  Otherwise you also need to
+        // apply the inversion.
+        /*
+        units_right, gramL, VC, stuff, VC_vecs, VC_poly, dim, facets, L_tor := fd_inf_setup(L,O: include_inv := include_inv or inv_stable);
+        v_cell_data := {<piece*i,i>: piece in FD, i in units_right};
+        */
+        
+        // TAYLOR: I commented this out now. The option is units_matrix_group
+        // Note, that we are allowed to work on the right during the fundamental domain and left during the side pairing because the actions are equivalent if you apply inversion first. There is an "anti-isomorphism" between the actions.
+
+        if include_inv then
+        
+            error "not implemented";
+            //M2:=MatrixAlgebra(magma_algebra(cl),2);
+            //units_left:=[M2!u : u in units_matrix_group(O: action:="left",include_inv:=include_inv)];
+            //v_cell_data:={<u*piece,units_left> : u in units_left,piece in FD};
+        else
+        
+            v_cell_data:={<rotation_matrix(u)*piece,rotation_matrix(u)> : u in units(O),piece in FD};
+        
+        end if;
+
+        all_v_cells:={x[1]: x in v_cell_data};
+        assert join_polyhedra(all_v_cells) eq v_cell_poly;
+        assert Volume(v_cell_poly) eq &+[Volume(pol) : pol in all_v_cells];
+        
+        //we need the exterior faces for the side-pairing
+        vprintf Clifford, 2: "computing exterior facets... \n";
+        if inv_stable then
+            vprint Clifford, 2: "The fundamental domain is aligned...\n";
+            FD_faces:=&cat[Faces(pol)[dim]: pol in FD];
+            FD_faces_exterior:={@ f : f in FD_faces|Multiplicity(FD_faces,f) eq 1 @};
+        else
+            vprint Clifford, 2: "The fundamental domain is not aligned...\n";
+            FD_faces_exterior:= exterior_facets(FD); //FIXME
+        end if;
+
+        //compute the side pairing. Note that the second entry of all_cells is a multiplication by a unit followed by a general translation.
+        all_cells:=[<translation_matrix(v)*x[1],translation_matrix(v)*x[2]>: v in translators, x in v_cell_data];
+        side_pair:=AssociativeArray();
+        
+        //for testing trivial side pairings
+        id_mat:=Matrix(2,2,[cl|1,0,0,1]);
+        neg_mat:=-id_mat;
+
+        vprintf Clifford, 2: "generating associative array... \n";
+        for i in [1..#FD_faces_exterior] do
+            vprint Clifford, 2: RealField(2)!i/#FD_faces_exterior;
+            f:=FD_faces_exterior[i];
+            pair := rep{p: p in all_cells|(f in Faces(p[1])[dim]) and (order_in_psl2(p[2]) ne 1)};
+            g:=pair[2];
+            side:=f;
+            side1:=g^-1*f;
+            side_pair[side]:=<g,side1>;
+        end for;
+        
+        vprintf Clifford, 2: "generated... \n";
+        
+        assert Keys(side_pair) eq Set(FD_faces_exterior);
+        
+        O`side_pair_infty:=side_pair;
+    end if;
+    
+    return O`side_pair_infty;
+        
+end intrinsic;
+
+
+////////////////////
+intrinsic side_pairing_infty(O::CliffOrd: redo := false,include_inv:=false)->Assoc
+////////////////////
+{Alias for side_pairing_infty with signature O::CliffOrd, FD::SeqEnum[TorPol].
+}
+    FD:=fundamental_domain_infty(O);
+    return side_pairing_infty(O,FD: redo := redo, include_inv:=include_inv);
+end intrinsic;
+
+intrinsic '*'(g::AlgMatElt,x::AlgClffElt)->AlgClffElt
+{}
+    assert g[1][1] in Parent(x);
+    assert Ncols(g) eq Nrows(g);
+    assert Ncols(g) eq 2;
+    assert is_vec(x);
+    return (g[1][1]*x+g[1][2])*(g[2][1]*x+g[2][2])^(-1);
+end intrinsic;
+
+intrinsic '*'(g::AlgMatElt[AlgClff[FldRat]],v::ModTupFldElt)->ModFldElt
+{}
+    cl_mag:=Parent(g[1][1]);
+    cv:=clifford_vector(cl_mag,v);
+    return vector(g*cv);
+end intrinsic;
+
+intrinsic '*'(g::AlgMatElt[AlgClff[FldRat]],v::TorLatElt)->TorLatElt
+{}
+    P:=Parent(v);
+    return P!(g*Vector(v));
+end intrinsic;
+
+intrinsic '*'(g::AlgMatElt[AlgClff[FldRat]],poly::TorPol)->TorPol
+{}
+    return Polyhedron([g*v: v in Vertices(poly)]);
+end intrinsic;
+
+
+///////////////
+intrinsic stabilizer_infty(O::CliffOrd,FD::Setq[TorPol],pairing_table::Assoc)->GrpFP,SetIndx[AlgMatElt]
+///////////////
+{
+Given an order and its fundamental domain and pairing table give a finitely presented group for the stabilizer of infinity in PSL2(O) together with generators.
+}
+
+    //TODO: Cache in stabilizer_of_infty attribute
+    if not assigned O`stabilizer_of_infinity then
+        lat:=vec(O);
+        cl:=clifford_algebra(O);
+        dim:=Rank(lat);
+        
+        id_mat:=Matrix(2,2,[cl|1,0,0,1]);
+        neg_mat:=-id_mat;
+
+        // external facets
+        sides := [side: side in Keys(pairing_table)];
+        vprintf Clifford,3: "number of sides = %o \n", #sides;
+        Sorted(~sides);
+        vprintf Clifford,3: "number of sides after sorting = %o \n", #sides;
+        
+        
+        num_sides:=#sides;
+        G,V,E:=Graph<{ x: x in [1..#sides]}|{}>;
+        
+        codim2:={@ @};
+        initial_data:=[];
+        adjacent_pairs:=[];
+        get_sides:=AssociativeArray();
+        
+        for pair in [[i,j]: i,j in [1..num_sides]| i lt j ] do
+            i,j:=Explode(pair);
+            F1:=sides[i];
+            F2:=sides[j];
+            E:=F1 meet F2;
+            if Dimension(E) eq dim-2 then
+                AddEdge(~G,V.i,V.j);
+                Include(~codim2,E);
+                
+                if Index(initial_data,<F1,E>) ne 0 or Index(initial_data,<F2,E>) ne 0 then
+                    F1_prime,F2_prime:=Explode(get_sides[E]);
+                    printf "Two pairs giving same intersection (%o,%o),(%o,%o) \n", i,j,Index(sides,F1_prime),Index(sides,F2_prime);
+                end if;
+
+                
+                initial_data:=initial_data cat [<F1,E>,<F2,E>];
+                get_sides[E]:=[F1,F2];
+            end if;
+        end for;
+        
+        Sorted(~codim2);
+        gens := {@ pairing_table[side][1] : side in sides @}; //element that modes side to the next side
+        num_gens:=#gens;
+
+        /*
+        The ith generator will be the element that moves across the ith side.
+        */
+
+        // make sure this is right--worried about some signs
+        // these are the "type 1" relations that say that translating across a facet
+        // and back gives you the identity
+
+        rels1_mat:=codimension1_relations(pairing_table);
+        assert forall{ r : r in rels1_mat | order_in_psl2(&*r) eq 1 };
+
+        /*
+        Walk around a codimension2 cell until we get an identity in PSL2.
+        */
+        
+        //NEW VERSION
+
+        //------
+        function next_step(F0,E0,side_pairing)
+        //------
+                V:=VertexSet(G);
+                E:=EdgeSet(G);
+                g,F0_prime:= Explode(side_pairing[F0]);
+                vprintf Clifford, 3: "F0_prime eq (g^-1)*F0: %o \n", g*F0_prime eq F0;
+                vprintf Clifford, 3: "F0_primes is a side: %o \n", F0_prime in sides;
+                A,B:=Explode(get_sides[E0]);
+                assert E0 eq A meet B;
+                vprintf Clifford, 3: "Both sides of E0 are in sides: %o %o \n",A in sides, B in sides;
+                
+                E1:=(g^(-1))*E0;
+                vprintf Clifford, 3: "preimage E1 subset of F0_prime: %o \n ", (E1 subset F0_prime);
+                vprintf Clifford, 3: "preimage E1 facet of F0_prime: %o \n ", (E1 in Facets(F0_prime));
+                i0_prime:=Index(sides,F0_prime);
+                v0_prime:=V.i0_prime;
+                assert exists(w){ w : w in Neighbors(v0_prime) | (sides[Index(w)] meet F0_prime) eq E1};
+                F1:=sides[Index(w)];
+                
+                
+                vprintf Clifford, 3: "There exists a neighbor of F0_prime with whose intersections is E1: %o \n", exists(w){ w : w in Neighbors(v0_prime) | (sides[Index(w)] meet F0_prime) eq E1};
+                vprintf Clifford, 3: "preimage E1 is recognized as a valid codim2 cell: %o \n", (E1 in codim2);
+            
+            
+                //A1:=(g^-1)*A;
+                //B1:=(g^-1)*B;
+                //vprintf Clifford, 3: "Both A1 and B1 are in sides: %o, %o \n", A1 in sides, B1 in sides;
+                
+                //choices:=get_sides[E1];
+                //vprintf Clifford, 3: "A1,B1 are the same as the facets which intersect at the codim2 cell: %o \n", {A1,B1} eq Set(choices);
+                
+                //assert #choices eq 2;
+                //assert F0_prime in choices;
+                //F1:=rep{ F: F in choices | F ne F0_prime };
+                vprintf Clifford, 3: "g=%o,F1=%o,E1=%o,\n",g,F1,E1;
+                return g,F1,E1;
+        end function;
+        
+        //STEP: set up the dictionary
+        
+        lookup_dict:=AssociativeArray();
+        
+        initial_data:={@ x : x in initial_data@};
+
+        for tup in initial_data do
+            vprintf Clifford, 2: "Percent complete: %o \n ", RealField(2)!#Keys(lookup_dict)/#initial_data;
+            F:=tup[1];
+            E:=tup[2];
+            assert E subset F;
+            vprintf Clifford, 2: "Starting process for initial data: %o/%o \n",Index(initial_data,<F,E>),#initial_data;
+            
+            F0:=F;
+            E0:=E;
+            
+            while not <F0,E0> in Keys(lookup_dict) do
+                vprintf Clifford, 2: "Adding to lookup_dict %o/%o \n",Index(initial_data,<F0,E0>),#initial_data;
+                g,F1,E1:=next_step(F0,E0,pairing_table);
+                lookup_dict[<F0,E0>]:=<g,F1,E1>;
+                F0:=F1;
+                E0:=E1;
+            end while;
+            
+        end for;
+        
+        vprintf Clifford,2: "Look-up table complete...\n";
+        
+        //STEP: Extract the equations from the lookup_dictionary and initial data.
+        rels2_mat:=codimension2_relations([x : x in initial_data],lookup_dict);
+        assert forall{ r : r in rels2_mat | order_in_psl2(&*r) eq 1 };
+
+    /*
+    //OLD VERSION
+        for E0 in codim2 do
+            F0:=rep{side : side in sides | E0 in Facets(side)};
+            rel:=[];
+            E_next:=E0;
+            F_next:=F0;
+            elt:=Matrix(2,2,[cl|1,0,0,1]);
+            sequence:=[];
+            Append(~sequence,[Index(codim2,E_next),Index(sides,F_next)]);
+
+            repeat
+                //new becomes old
+                F_prev:=F_next;
+                E_prev:=E_next;
+
+                //pullback side to original fundamental domain
+                gF_prev,F_prev_prime:= Explode(pairing_table[F_prev]);
+                rel:=[gF_prev] cat rel;
+                elt:=gF_prev*elt;
+                
+                //find how the codim2 cell looks after pullback (pulled back)
+                E_next:=(gF_prev^(-1))*E_prev;
+
+                //find the next facet to step across (pulled back)
+                choices:={F_next : F_next in sides | E_next in Facets(F_next)};
+
+                //printf "choices: %o \n", choices;
+                assert F_prev_prime in choices;
+                //assert #choices eq 2;
+
+                //take the wall that isn't the previous
+                F_next:=rep{ F: F in choices | F ne F_prev_prime };
+
+                i_E:=Index(codim2,E_next);
+                i_F:=Index(sides,F_next);
+                
+                if [i_E,i_F] in sequence then
+                    period:=#sequence-Index(sequence,[i_E,i_F]);
+                    vprintf Fundamental, 5: "period %o \n",period;
+                end if;
+                
+                Append(~sequence,[i_E,i_F]);
+
+            until elt eq id_mat or elt eq neg_mat;
+            
+            
+            rel0:=[pairing_table[sides[3]][1] : pair in sequence[1..#sequence-1]];
+            
+            test1:=&*rel;
+            assert test1 eq id_mat or test1 eq neg_mat;
+            //test0:=&*rel0;
+            
+            Append(~rels2_mat,rel);
+        end for;
+
+    */
+
+        rels_mat:=[r : r in Set(rels1_mat cat rels2_mat)];
+        rels:=[[Index(gens,g) : g in rel] : rel in rels_mat];
+        gens_new,rels_new:=lift_relations([g: g in gens],rels);
+        
+        FG := FreeGroup(#gens_new);
+        stab_infty,to_stab_infty := quo<FG|rels_new>;
+        O`stabilizer_of_infinity:=stab_infty;
+        O`generators_of_stabilizer:=gens_new;
+    end if;
+    
+    return O`stabilizer_of_infinity,O`generators_of_stabilizer;
+    
+end intrinsic;
+
+///////////////
+intrinsic stabilizer_infty(O::CliffOrd,FD::Setq[TorPol]: include_inv:=false)->GrpFP,SetIndx[AlgMatElt]
+///////////////
+{Alias for stabilizer infty}
+    side_pair:=side_pairing_infty(O,FD:include_inv:=include_inv);
+    return stabilizer_infty(O,FD,side_pair);
+end intrinsic;
+
+///////////////
+intrinsic stabilizer_infty(O::CliffOrd: include_inv:=false)->GrpFP,SetIndx[AlgMatElt]
+///////////////
+{Alias for stabilizer_infty}
+    FD:=fundamental_domain_infty(O: include_inv:=include_inv);
+    return stabilizer_infty(O,FD: include_inv:=include_inv);
+end intrinsic;
+
+////////////////////
+intrinsic to_voronoi_cell(O::CliffOrd,pt0::ModTupFldElt)->AlgMatElt,ModTupFldElt
+////////////////////
+{Given an order in a Clifford algebra and a point pt representing Clifford vector in cl coordinates, then return the element that is equivalent to it in the Voronoi cell of the small lattice of O together with the element that you add to pt in order to reduce pt to an element of the Voronoi cell.
+
+The procedure used is inefficient but it might be good enough of course, the general problem is hard. This is a closest vector problem.}
+
+    cl:=clifford_algebra(O);
+    pt:=pt0;
+    
+    L:=vec(O:small:=true);
+    VC,stuff,VC_vecs:=VoronoiCell(L);
+    VC_poly:=Polyhedron([Eltseq(f): f in VC]);
+    lattice_points:=[L! v: v in VC_vecs];
+    dim := Rank(L);
+    
+    ineqns := Inequalities(VC_poly);
+    assert #ineqns eq #lattice_points;
+    
+    vals := func<pt|[ineqn[2]- &+[pt[i]*Eltseq(ineqn[1])[i]: i in [1..dim]]: ineqn in ineqns]>;
+    score := func<pt|&+[Q|x: x in vals(pt)|x gt 0]>;
+    
+    ineq_vals := vals(pt);
+    // we know that 0 is inside
+    add := L!0;
+    while score(pt) gt 0 do
+        moves := [score(pt+Vector(v)): v in lattice_points];
+        min,minind := Min(moves);
+        assert min lt score(pt);
+        add +:= lattice_points[minind];
+        pt +:= Vector(lattice_points[minind]);
+    end while;
+    
+    L_tor:=Ambient(VC_poly);
+    assert L_tor!pt in VC_poly;
+    trans:=translation_matrix(O!clifford_vector(cl,Vector(add)));
+    return trans,pt;
+end intrinsic;
+
+
+////////////////////
+intrinsic to_voronoi_cell(O::CliffOrd,pt0::TorLatElt)->AlgMatElt,TorLatElt
+////////////////////
+{Alias for to_voronoi_cell with}
+    L_tor:=Parent(pt0);
+    add,pt:=to_voronoi_cell(O,Vector(pt0));
+    return add, L_tor!pt;
+end intrinsic;
+
+
+////////////////////
+intrinsic inv_side_pairing_psl2(O::CliffOrd,FD::SeqEnum[TorPol])->Assoc
+////////////////////
+{Give the elements such that take the bottom of the fundamental domain to the other side of the fundamental domain.
+Note that when the fundamental domain for the stabilizer of infinity is stable under inv(x) = -bar(x) then for every polytope pol comprising the fundamental domain we have that inv(pol) is also in the fundamental domain. This means F cap inv(F) = F. That being said for each facet f we have that inv(f) cap F being some unique element.
+
+}
+    cl:=clifford_algebra(O);
+    inv:=func<x|inversion_inv(cl,x)>;
+    pol:=FD[1];
+
+    L_tor:=Ambient(pol);
+    side_pairing:=AssociativeArray();
+    for pol in FD do
+        interior_pt := &+Vertices(pol)/#Vertices(pol); // interior point
+        interior_pt_prime := inv(interior_pt);
+        trans,pt_equiv := to_voronoi_cell(O,interior_pt_prime);
+        rot:=rep{rotation_matrix(u): u in units(O) |exists{d: d in FD| rotation_matrix(u)*pt_equiv in d}};
+        inversion:=Matrix(2,2,[cl|0,-1,1,0]);
+        side_pairing[rot*trans*inv(pol)]:=<rot*trans*inversion,pol>;
+    end for;
+    
+    return side_pairing;
+    
+end intrinsic;
+
+
+////////////////////
+intrinsic fundamental_domain(O::CliffOrd : include_inv:=false, inv_stable:=true)->SeqEnum[HypPol],.
+////////////////////
+{
+Compute a fundamental domain for PSL2(O). The output is a sequence of hyperbolic polyhedra whose union is a hyperbolic polyhedral complex forming the fundamental domain.
+The option include_inv creates a fundamental domain for the stabilizer of the extension of the stabilizer of infinity for PSL2(O) which includes the map x->-bar(x).
+The option inv_stable makes a fundamental domain for the stabilizer of infinity which is invariant under x -> -bar(x). This is important in the construction of the fundamental domain of PSL2(O).
+The option include_inv cannot be selected while inv_stable is selected.
+
+Currently, the spike option is not implemented.
+}
+    /*
+    I just want to outline how to make the fundamental domain for the
+    PSL2(O) given the fundamental domain for PSL2(O)_{infty} and
+    some functions.
+
+    --extend a flat Euclidean halfspace to a hyperbolic halfspace
+    --project a flat hyperbolic halfspaces to a halfspace in
+    the Euclidean space
+    --create spherical halfspaces in hyperbolic space
+
+    Then the construction of the new fundamental domain is easy.
+    Just take half-space above the bubble meet with the half spaces
+    obtained by extending the half spaces for the fundamental domain
+    of the stabilizers of infinity.
+    */
+    
+    
+/*
+TODO: Create the spike.
+*/
+    if not assigned O`fundamental_domain then
+        cl:=clifford_algebra(O);
+        H:=hyperbolic_space(cl);
+        
+        FD:=fundamental_domain_infty(O:include_inv:=include_inv, inv_stable:=inv_stable);
+        bub:=flip(bubble(H));
+
+        FD_SL2 :=[];
+        for p in FD do
+            pol:=polyhedron(H,p);
+            Append(~FD_SL2,pol meet bub);
+        end for;
+    
+        O`fundamental_domain:=FD_SL2;
+    end if;
+    
+    return O`fundamental_domain;
+    
+end intrinsic;
+
+////////////////////
+intrinsic side_pairing(O::CliffOrd: include_inv:=false)->Assoc
+////////////////////
+{
+The side pairing for the fundamental domain of PSL2(O).
+The convention for the pairing table is as follows. Return an associative array which for each facet f1 of the fundamental domain D returns <g,f2>: The g is an AlgMatElt which is is the "step" across the facet f1. That is g(D) meet D is f1; The f2 is a facet which is what you get from pulling back the intersection to the original fundamental domain. We always have f1=g*f2 since f2 = (g^-1)*f1.\n
+}
+
+    if not assigned O`side_pair then
+    
+        /*
+        this is trash I think. The correct code can be obtained from fundamental-domain-functions.mag in sl2_data. ---Taylor, Sept 2025
+        */
+        
+        FD:=fundamental_domain_infty(O);
+        cl:=clifford_algebra(O);
+        side_pair_infty:=side_pairing_infty(O,FD: include_inv:=include_inv);
+        S:=Matrix(2,2,[cl|-1,0,0,1]);
+
+        H:=hyperbolic_space(cl);
+        bub:=flip(bubble(H));
+        bottom:=bub meet flip(bub);
+        bottom_pieces:=[]; //codimension 1
+        inv:=func<x|inversion_inv(cl,x)>;
+        side_pair:=AssociativeArray();
+        bottom_pair:=AssociativeArray();
+        FD_SL2:=[];
+
+        for p in FD do
+            pol:=polyhedron(H,p);
+            chunk:=pol meet bub;
+            chunk_partner:=polyhedron(H,inv(p)) meet bub;
+            bottom_pair[chunk]:=chunk_partner;
+            side_pair[chunk meet bottom] := <S,chunk_partner meet bottom>;
+            Append(~FD_SL2,chunk);
+            Append(~bottom_pieces,chunk meet bottom);
+        end for;
+
+        sides_stab:=[s : s in Keys(side_pair_infty)];
+
+        for f in sides_stab do
+            g,fg:=Explode(side_pair_infty[f]);
+            fE:=polyhedron(H,f) meet bub;
+            fgE:=polyhedron(H,f) meet bub;
+            side_pair[fE]:=<g,fgE>;
+        end for;
+    
+        O`side_pair:=side_pair;
+        
+    end if;
+
+    return O`side_pair;
+    
+end intrinsic;
+    
+
+intrinsic codimension1_relations(side_pair :: Assoc)->SeqEnum
+{Given a side_pairing, determine the codimension 1 relations obtained from stepping across a facet and then stepping back. The keys of the side pairing are such that side_pair[facet]:=<g,facet'> where g*facet'= facet.}
+        rels1:={@ @};
+        Fs:=[F : F in Keys(side_pair)];
+        for F in Fs do
+            g,F_prime:=Explode(side_pair[F]);
+            g1:=side_pair[F_prime][1];
+            assert order_in_psl2(g*g1) eq 1;
+            if not [g1,g] in rels1 then
+                Include(~rels1,[g,g1]);
+            end if;
+        end for;
+        
+        assert forall{ r : r in rels1 | order_in_psl2(&*r) eq 1 };
+        
+        return [r : r in rels1];
+end intrinsic;
+
+
+intrinsic codimension2_relations(initials::Setq,lookup_dict::Assoc)->SeqEnum,SeqEnum
+{Given a look_table in which have pairs <F0,E0> and which returns <g,F1,E1> which are the the element that we use to cross the facet F, the pull back of E0 to E1 and the next facet F1, we obtain the codimension 2 relations by stepping around the codimension 2 facet.
+}
+    torsion:=[];
+    relations:=[];
+    
+    for tup in initials do
+        v:=tup[1];
+        e:=tup[2];
+        
+        v0:=v;
+        e0:=e;
+        
+        relation:=[];
+
+        repeat
+            vprintf Clifford, 2: "%o,", Index(initials,<v0,e0>);
+            g0,v0,e0:=Explode(lookup_dict[<v0,e0>]);
+            relation:=relation cat [g0];
+        until v0 eq v and e0 eq e;
+        
+        g1:=&*relation;
+        
+        m:=order_in_psl2(g1);
+        if m gt 1 then
+            Append(~torsion,<v0,e0,g1>);
+        end if;
+        
+        rel:=<relation,m>;
+        Append(~relations,rel);
+    end for;
+        
+    relations_set:={@ r : r in relations@};
+    rels:=[r : r in relations_set];
+    relations_new:=[];
+    
+    for rel in rels do
+        rel0:=rel[1];
+        m:=rel[2];//the order of the element
+        relation:=[];
+        for i in [1..m] do
+            relation:=relation cat rel0;
+        end for;
+        Append(~relations_new,relation);
+    end for;
+    
+    assert forall(x){ r : r in relations_new | order_in_psl2(&*r) eq 1 };
+    
+    return relations_new,torsion;
+end intrinsic;
+
+
+//----------
+intrinsic order_in_psl2(g0::AlgMatElt)->BoolElt
+//----------
+{
+Determine the order of a matrix in the quotient. 
+}
+  // It was just annoying to have to ask if something was equal to the negative the identity or the identity a bunch of times.
+  try
+    ord := Order(g0);
+    if IsEven(ord) and Eltseq(g0^(ord div 2)) eq [-1,0,0,-1] then
+      ord div:= 2;
+    end if;
+  catch e // infinite order
+    ord := 0;
+  end try;
+  return ord;
+end intrinsic;
+
+/*  cl_mag:=Parent(g0[1][1]);
+    id_mat:=Matrix(2,2,[cl_mag|1,0,0,1]);
+    neg_mat:=Matrix(2,2,[cl_mag|-1,0,0,-1]);
+
+    elt:=id_mat;
+    i:=0;
+    repeat
+        elt:=elt*g0;
+        i:=i+1;
+    until (elt eq id_mat) or (elt eq neg_mat);
+    return i;*/

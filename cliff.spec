@@ -1,6 +1,14 @@
 package-cliff.mag
+package-coset-table.mag
 package-cusp.mag
 package-grpcliff.mag
+package-modular-symbols.mag
 package-order.mag
 package-relation-finder.mag
-
+package-utils.mag
+package-IO.mag
+package-LMFDB.mag
+package-jsonify.mag
+package-fundamental-domain.mag
+package-polyhedra.mag
+package-magma-fixes.mag

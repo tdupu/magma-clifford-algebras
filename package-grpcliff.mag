@@ -1,3 +1,6 @@
+Z:=Integers();
+Q:=RationalField();
+
 /*
 The template for types and intrinsics we are using is here:
 https://magma.maths.usyd.edu.au/magma/handbook/congruence_subgroups_of_psl2r
@@ -72,16 +75,25 @@ Things I want:
 */
 
 declare type GrpPSL2Cliff[GrpPSL2CliffElt];
-declare attributes GrpPSL2Cliff: matrix_group, matrix_group_kernel, fp_group, clifford_algebra, clifford_order, low_index_subgroups, label, mat_to_SL2Ofree, SL2Ofree_to_mat, relations, vec_to_mat, mat_to_vec, sl2quo_to_mat, mat_to_sl2quo, psl2quo_to_mat, mat_to_psl2quo, sl2_matrix_group, sl2_fp_group, psl2_fp_group, sl2_to_psl2_map, mat_to_unit, unit_to_mat, unit_to_sl2quo, sl2quo_to_unit, vec_to_sl2quo, sl2quo_to_vec, unit_to_psl2quo, psl2quo_to_unit, vec_to_psl2quo,psl2quo_to_mat_func, psl2quo_to_vec,gl2,supergroup,matrix_generators,sl2_fp_generators,psl2_fp_generators, index_of_sub, is_supergroup,decompose_matrix,cusps,mat_to_psl2quo_func, gamma0fp_dict,sl2_to_psl2_fp, matrix_algebra, hecke_double_cosets,sl2quo_to_mat_func;
+declare attributes GrpPSL2Cliff: matrix_group, matrix_group_kernel, fp_group, clifford_algebra, clifford_order, low_index_subgroups, label, mat_to_SL2Ofree, SL2Ofree_to_mat, relations, vec_to_mat, mat_to_vec, sl2quo_to_mat, mat_to_sl2quo, psl2quo_to_mat, mat_to_psl2quo, sl2_matrix_group, sl2_fp_group, psl2_fp_group, sl2_to_psl2_map, mat_to_unit, unit_to_mat, unit_to_sl2quo, sl2quo_to_unit, vec_to_sl2quo, sl2quo_to_vec, unit_to_psl2quo, psl2quo_to_unit, vec_to_psl2quo,psl2quo_to_mat_func, psl2quo_to_vec,gl2,matrix_generators,sl2_fp_generators,psl2_fp_generators, index_of_sub, decompose_matrix,cusps,mat_to_psl2quo_func, gamma0fp_dict,sl2_to_psl2_fp, matrix_algebra, hecke_double_cosets,sl2quo_to_mat_func,hecke_operators;
+
 declare attributes GrpPSL2CliffElt: cliff_alg, matrix, fp_elt, eltseq, clifford_algebra, magma_algebra, parent, group_order;
+
+import "fundamental-domain.mag": voronoi_cell, fund_domain, to_vor, present_stab_inf, make_semidirect, match_semidirect, make_inverses, pres_psl2;
+
+import "fundamental-domain-functions.mag": sl2_data;
 
 Z:=Integers();
 Q:=RationalField();
 infty:=Infinity();
 
+// AML Nov 6 2024: modified to allow nonpositive values in rel, in
+// accordance with Magma's convention; also required the second argument
+// to be a sequence of integers
 //########################
-function evaluate_relation(eltseq,rel)
+intrinsic evaluate_relation(eltseq::SeqEnum,rel::SeqEnum[RngIntElt])->.
 //########################
+{}
 /*
     INPUT:
         --eltseq, a nonempty sequence of elements which can be multiplied
@@ -89,13 +101,24 @@ function evaluate_relation(eltseq,rel)
         
     OUTPUT:
         --eltseq[i1]*eltseq[i2]* ... * eltseq[ir];
+
+    Note: a negative entry is interpreted as the inverse of the corresponding
+          generator.
 */
-    return &*[eltseq[i] : i in rel];
-end function;
+    return &*[Universe(eltseq)|eltseq[AbsoluteValue(i)]^Sign(i) : i in rel|i ne 0];
+end intrinsic;
+
+//########################
+intrinsic evaluate_relation(eltseq::SetIndx,rel::SeqEnum[RngIntElt])->.
+//########################
+{}
+  return evaluate_relation([x: x in eltseq],rel);
+end intrinsic;
 
 //%%%%%%%%%%%%%%%%%
-function evaluate_word_to_matrix(my_word,my_matrix_dict,G)
+intrinsic evaluate_word_to_matrix(my_word::GrpFPElt,my_matrix_dict::Assoc,G::GrpFP)->GrpMatElt
 //%%%%%%%%%%%%%%%%
+{}
 /*
     INPUT:
         --my_word, an element of the FP group G
@@ -112,14 +135,15 @@ function evaluate_word_to_matrix(my_word,my_matrix_dict,G)
         M1 eq evaluate_word_to_matrix(s*tau_minus_alpha,eval_dict_quo,SL2O_quo);
 
 */
-    M:=#Eltseq(my_word);
+  // AML: changed my_word to G!my_word to make Eltseq do the right thing.
+    M:=#Eltseq(G!my_word);
     if M eq 0 then
         my_matrix:=my_matrix_dict[my_word];
     else
-        my_matrix:=&*[my_matrix_dict[G.(Eltseq(my_word)[i])] : i in [1..M]];
+        my_matrix:=&*[my_matrix_dict[G.(Eltseq(G!my_word)[i])] : i in [1..M]];
     end if;
     return my_matrix;
-end function;
+end intrinsic;
 
 
 //######################
@@ -161,25 +185,25 @@ intrinsic '*'(x::GrpPSL2CliffElt, y::GrpPSL2CliffElt) -> GrpPSL2CliffElt
     return make_psl2_group_elt(Parent(x), x`elt * y`elt);
 end intrinsic;
 
-//######################
+/*//######################
 intrinsic 'eq'(T1::GrpPSL2Cliff, T2::GrpPSL2Cliff) -> BoolElt
 //######################
 {Checks if two GrpPSL2Cliff objects are equal.}
     return T1`matrix_group eq T2`matrix_group;
-end intrinsic;
+end intrinsic;*/
 
 //######################
 intrinsic 'eq'(x::GrpPSL2CliffElt, y::GrpPSL2CliffElt) -> BoolElt
 //######################
 {Checks if two GrpPSL2CliffElt objects are equal.}
-    return Parent(x) eq Parent(y) and x`elt eq y`elt;
+    return Parent(x`matrix[1,1]) eq Parent(y`matrix[1,1]) and x`matrix in [y`matrix,-y`matrix];
 end intrinsic;
 
 //######################
 intrinsic Print(E::GrpPSL2CliffElt)
 //######################
 {Prints a GrpPSL2CliffElt object.}
-    printf "%o", E`mat;
+    printf "%o", E`matrix;
 end intrinsic;
 
 //######################
@@ -234,37 +258,35 @@ intrinsic translation_matrix(v::CliffOrdElt)->AlgMatElt
     OUTPUT:
         --the 2x2 matrix corresponding to x -> uxu^*.
 }
+    cl_mag:=get_algebra(Parent(v));
     v_elt:=get_algebra_elt(v);
-    return Matrix(2,2,[1,v_elt,0,1]);
+    return Matrix(2,2,[cl_mag|1,v_elt,0,1]);
 end intrinsic;
 
 //##################
 intrinsic translation_matrix(v_elt::CliffAlgElt)->AlgMatElt
 //##################
 {
-    INPUT:
-        --v, a Clifford clifford vector
-        
-    OUTPUT:
-        --the 2x2 matrix corresponding to x -> uxu^*.
+    INPUT:\n
+        --v, a Clifford clifford vector\n
+        \n
+    OUTPUT:\n
+        --the 2x2 matrix corresponding to x -> x+v.\n
 }
-    return Matrix(2,2,[1, v_elt, 0, 1]);
+    cl:=Parent(v_elt);
+    return Matrix(2,2,[cl|1, v_elt, 0, 1]);
 end intrinsic;
 
+
 //##################
-intrinsic clifford_bianchi_group(O::CliffOrd : method:="random", verbose:=false, word_length:=5)->GrpPSL2Cliff
+intrinsic clifford_bianchi_group(O::CliffOrd : method:="dirichlet",batch_size:=5000,num_rels:=10000,word_length:=20,inv_stable:=false, redo:=false)->GrpPSL2Cliff
 //##################
-{
-    INPUT:
-        --O, an order in a Clifford algebra
-        
-    OUTPUT:
-        --A PSL2CliffGroup object
+{Compute a clifford bianchi group from an order in a clifford algebra.
 }
 
     //--------TODO: MAKE OPTIONAL PARAMETERS--------
     
-    if assigned O`psl2 then
+    if not redo and assigned O`psl2 then
         return O`psl2;
     end if;
     
@@ -283,7 +305,7 @@ intrinsic clifford_bianchi_group(O::CliffOrd : method:="random", verbose:=false,
     //
     //---Norm Clifford-Euclidean Case
     //
-    if is_norm_euclidean(O) then
+    if is_norm_euclidean(O) and is_star_invariant(O) then
     
         //---printing---
         vprintf Clifford, 3: "the order was found to be norm Euclidean...\n";
@@ -302,7 +324,7 @@ intrinsic clifford_bianchi_group(O::CliffOrd : method:="random", verbose:=false,
         rots:=[];
         trans:=[];
         
-        //-----printing shit-----
+        //-----printing stuff-----
         vprintf Clifford,4: "gathering unit and vector matrices...\n";
         
         unit_to_mat[O!1]:=id_mat;
@@ -329,20 +351,17 @@ intrinsic clifford_bianchi_group(O::CliffOrd : method:="random", verbose:=false,
         
         group_generators:=trans cat rots cat [S];
         
-        SL2O_mat:=sub<GL2|[GL2!g: g in group_generators]>;
         
         id:=group_generators[1]*group_generators[1]^(-1);
         num_gens:=#group_generators;
         
         //
         //---------FIND THE RELATIONS FOR THE GROUP-------------
-        //
-
-        
+        //        
         if method eq "products" then
             
-        //-----printing shit-----
-        vprintf Clifford,3: "figuring out relations for our group by brute force...\n using words of length %o to compute relations...\n this may take a while...\n", word_length;
+            //-----printing stuff-----
+            vprintf Clifford,3: "figuring out relations for our group by brute force...\n using words of length %o to compute relations...\n this may take a while...\n", word_length;
             
             perms:=Permutations({1..num_gens},word_length);
             relations:=[];
@@ -352,10 +371,8 @@ intrinsic clifford_bianchi_group(O::CliffOrd : method:="random", verbose:=false,
                     Append(~relations,perm);
                 end if;
             end for;
-            
-        end if;
         
-        if method eq "random" then
+        elif method eq "random" then
             //the code used here can be found in relation-finder.mag
             
             mat_gens := {@ g : g in group_generators @} join {@ g^-1 : g in group_generators @};
@@ -363,285 +380,484 @@ intrinsic clifford_bianchi_group(O::CliffOrd : method:="random", verbose:=false,
         
             
             //%%%%%%%%%%%%%%%%%%%%%%
-            function gives_relation(elt3,elt3_inv : verbose:=false)
+            function gives_relation(elt3,elt3_inv)
             //%%%%%%%%%%%%%%%%%%%%%%
                 //---printing---
-                if verbose then
-                    printf "entering gives_relation...\n";
-                end if;
+                vprintf Clifford,5: "entering gives_relation...\n";
                 
                 return (elt3 eq elt3*elt3_inv);
             end function;
             
             //g*mat_gens[inverse[Index(mat_gens,g)]] eq 1
-            random_rels:=get_relations(mat_gens,inverse,gives_relation);
+            random_rels:=get_relations(mat_gens,inverse,gives_relation: batch_size:=batch_size,num_rels:=num_rels, len:=word_length);
             triv_rels:=get_trivial_relations(mat_gens,inverse);
             relations:=random_rels cat triv_rels;
             group_generators:=mat_gens;
             num_gens:=#group_generators;
-        end if;
-        
-        //
-        //--------START BUILDING THE QUOTIENT MATRICES
-        //
-        
-        //-----printing shit-----
-        vprintf Clifford, 4: "the relations have been computed...\n";
-        
-        SL2Ofree<[z]>:= FreeGroup(num_gens);
-        SL2Ofree_to_mat := AssociativeArray();
-        mat_to_SL2Ofree := AssociativeArray();
-        sl2quo_to_mat:=AssociativeArray();
-        mat_to_sl2quo:=AssociativeArray();
-        psl2quo_to_mat:=AssociativeArray();
-        mat_to_psl2quo:=AssociativeArray();
-        
-        id_free:=z[1]*z[1]^(-1);
-        SL2Ofree_to_mat[id_free]:=id_mat;
-        mat_to_SL2Ofree[id_mat]:=id_free;
-
-        for i in [1..num_gens] do
-            mat_to_SL2Ofree[group_generators[i]]:=z[i];
-            mat_to_SL2Ofree[group_generators[i]^(-1)]:=z[i]^(-1);
-            SL2Ofree_to_mat[z[i]] := group_generators[i];
-            SL2Ofree_to_mat[z[i]^(-1)] := group_generators[i];
-        end for;
-        
-        //S^2 = -id.
-        neg_free:=mat_to_SL2Ofree[S]^2;
-        mat_to_SL2Ofree[neg_mat]:=neg_free;
-        
-        //-----printing shit-----
-        vprintf Clifford, 4:  "computing the finitely presented group for SL2O...\n";
-
-        G1,quot1:=quo<SL2Ofree|relations>;
-        SL2Oquo<[y]>,quot2:=Simplify(G1);
-
-        id_SL2Oquo:=(SL2Oquo.1)*(SL2Oquo.1^(-1));
-        sl2quo_to_mat[id_SL2Oquo]:=id_mat;
-        mat_to_sl2quo[id_mat]:=id_SL2Oquo;
-        
-        //we use that S^2=-neg_mat to get the relation
-        num_gens_sl2quo:=#Generators(SL2Oquo);
-
-        for i in [1..num_gens_sl2quo] do
-            for j in [1..num_gens] do
-                if y[i] eq quot2(quot1(SL2Ofree.j)) then
-                    sl2quo_to_mat[y[i]]:= SL2Ofree_to_mat[SL2Ofree.j];
-                    sl2quo_to_mat[y[i]^(-1)]:=SL2Ofree_to_mat[SL2Ofree.j^(-1)];
-                end if;
-            end for;
-        end for;
-
-        for i in [1..num_gens] do
-            my_mat:=group_generators[i];
-            my_mat_inv:=my_mat^(-1);
-            mat_to_sl2quo[my_mat]:=quot2(quot1(mat_to_SL2Ofree[my_mat]));
-            mat_to_sl2quo[my_mat_inv]:=quot2(quot1(mat_to_SL2Ofree[my_mat_inv]));
-        end for;
-        
-        //
-        //----PSL2 part
-        //
-        
-        //-----printing shit-----
-        vprintf Clifford,3: "computing the finitely presented group for PSL2O...\n";
-        
-        s_symbolic:=mat_to_sl2quo[S];
-        neg_symbolic:=s_symbolic*s_symbolic;
-        
-        G2,quot3:=quo<SL2Oquo|neg_symbolic>;
-        PSL2Oquo<[g]>,quot4:=Simplify(G2);
-        
-        id_PSL2Oquo:=(PSL2Oquo.1)*(PSL2Oquo.1^(-1));
-        
-        psl2quo_to_mat[id_PSL2Oquo]:=id_mat;
-        mat_to_psl2quo[id_mat]:=id_PSL2Oquo;
-        mat_to_psl2quo[neg_mat]:=id_PSL2Oquo;
-        quot_map:=quot3*quot4;
-
-        for x in Keys(sl2quo_to_mat) do
-            my_mat:=sl2quo_to_mat[x];
-            my_quo:=quot_map(x);
-            psl2quo_to_mat[my_quo]:=my_mat;
-            mat_to_psl2quo[my_mat]:=my_quo;
-        end for;
-        
-        //-----printing shit-----
-        vprintf Clifford, 3: "indexing units and clifford vectors...\n";
-        
-        unit_to_psl2quo:=AssociativeArray();
-        psl2quo_to_unit:=AssociativeArray();
-        vec_to_psl2quo:=AssociativeArray();
-        psl2quo_to_vec:=AssociativeArray();
-        unit_to_sl2quo:=AssociativeArray();
-        sl2quo_to_unit:=AssociativeArray();
-        vec_to_sl2quo:=AssociativeArray();
-        sl2quo_to_vec:=AssociativeArray();
-        
-        unit_to_psl2quo[O!1]:=id_PSL2Oquo;
-        psl2quo_to_unit[id_PSL2Oquo]:=O!1;
-        
-        for u in Ogrp do
-        
-        //--printing--
-        vprintf Clifford,3:"adding u=%o \n",u;
-        
-            matu:=unit_to_mat[u];
-            uquo:=mat_to_sl2quo[matu];
-            uquobar:=quot_map(uquo);
-            mat_to_psl2quo[matu]:=uquobar;
-            psl2quo_to_mat[uquobar]:=matu;
             
-            unit_to_sl2quo[u]:=uquo;
-            uquobar:=quot_map(uquo);
-            unit_to_psl2quo[u]:=uquobar;
-            psl2quo_to_unit[uquobar]:=u;
-            sl2quo_to_unit[uquo]:=u;
-        end for;
-        
-        //t1:=translation_matrix(cl!1);
-        //t1_inv:=t1^(-1);
-        
-        
-        for v in [-v : v in vec_basis(O)] cat vec_basis(O) do
-            matv:=vec_to_mat[v];
-            vquo:=mat_to_sl2quo[matv];
-            vquobar:=quot_map(vquo);
-            mat_to_psl2quo[matv]:=vquobar;
-            psl2quo_to_mat[vquobar]:=matv;
-            vec_to_sl2quo[v]:=vquo;
-            vec_to_psl2quo[v]:=vquobar;
-            psl2quo_to_vec[vquobar]:=v;
-            sl2quo_to_vec[vquo]:=v;
-        end for;
-        
-        //%%%%%%%%%%%%%%%%%
-        function sl2quo_to_mat_func(my_word)
-        //%%%%%%%%%%%%%%%%
-            return evaluate_word_to_matrix(my_word,PSL2O`sl2quo_to_mat,PSL2O`sl2_fp_group);
-        end function;
-        
-        //%%%%%%%%%%%%%%%%%
-        function psl2quo_to_mat_func(my_word)
-        //%%%%%%%%%%%%%%%%
-            return evaluate_word_to_matrix(my_word,PSL2O`psl2quo_to_mat,PSL2O`psl2_fp_group);
-        end function;
-        
-        
-        PSL2O`gl2:=GL2;
-        PSL2O`sl2_matrix_group:=SL2O_mat;
-        PSL2O`matrix_algebra:=MatrixAlgebra(cl_magma,2);
-        PSL2O`matrix_group:=SL2O_mat;
-        PSL2O`matrix_group_kernel:=trivial_matrix_group;
-        
-        PSL2O`clifford_order:=O;
-        PSL2O`clifford_algebra:=cl;
-        
-        PSL2O`sl2_fp_group:=SL2Oquo;
-        PSL2O`psl2_fp_group:=PSL2Oquo;
-        PSL2O`sl2_to_psl2_fp:=quot_map;
-        PSL2O`fp_group:=PSL2Oquo;
-        id_map:=hom<PSL2Oquo->PSL2Oquo|x:->x>;// I was thinking that maybe for a finitely presented group we wanted to keep track of its relationship to the big ambient.
-        
-        PSL2O`sl2quo_to_mat:=sl2quo_to_mat;
-        PSL2O`sl2quo_to_mat_func := sl2quo_to_mat_func;
-        PSL2O`mat_to_sl2quo:=mat_to_sl2quo;
-        PSL2O`psl2quo_to_mat:=psl2quo_to_mat;
-        PSL2O`psl2quo_to_mat_func := psl2quo_to_mat_func;
-        PSL2O`mat_to_psl2quo:=mat_to_psl2quo;
-        
-        PSL2O`is_supergroup:=true;
-        //PSL2O`supergroup:=itself
-        PSL2O`matrix_generators:=group_generators;
-        PSL2O`psl2_fp_generators:=Generators(PSL2Oquo);
-        PSL2O`sl2_fp_generators:=Generators(SL2Oquo);
+        elif method eq "fundamental_domain" then
+            
+            //call in the necessary lattices and grops
+            cl:=clifford_algebra(O);
+            lat:=vec(O:small:=true);
+            gp:=units_matrix_group(O);
 
+            new_fd, new_fd_inds, pairing_table, fd, lps, sorted_cones, sorted_pg, sorted_pgto := fund_domain(lat,gp: gram := InnerProductMatrix(lat));
+            psl2_fp,to_psl2_fp,stab_gens,inv_trs,mats,gen_maps := pres_psl2(lat,gp,new_fd,pairing_table,fd,lps,cl: gram := InnerProductMatrix(lat));
+            // currently getting stuck on inv_inv; we don't get inverses
+            // of the rescaled sphere
+            
+            inv_mat:=Matrix(2,2,[cl|0,-1,1,0]);
+            mat_gens_stab:=[matn_tuple_to_sl2(O,tup) : tup in stab_gens];
+            mat_gens_bottom:=[ matn_tuple_to_sl2(O,tup)*inv_mat : tup in inv_trs];
+            mat_gens:=mat_gens_stab cat mat_gens_bottom;
+            mat_gens_inverted:=[g^-1 : g in mat_gens];
+            rels:=[Eltseq(r[1]) cat Reverse([-x : x in Eltseq(r[2])]) : r in Relations(psl2_fp)];
+            group_generators,relations:=lift_relations(mat_gens_inverted,rels); //seems very wrong
+            
+        elif method eq "fundamental_domain_v2" then
+            
+            FD:=fundamental_domain_infty(O:inv_stable:=true,include_inv:=false);
+            side_pair_infty:=side_pairing_infty(O,FD);
+            stab_infty,to_stab_infty,gens_infty:=stabilizer_infty(O,FD,side_pair_infty);
+            group_generators,relations,G, side_pair, torsion_elements, polyhedron1, polyhedron2, edge2, next_step, side_pair_poly,FD_SL2:=sl2_data(O,FD,side_pair_infty,stab_infty,gens_infty);
+            
+            //caching
+            O`side_pair:=side_pair_poly;
+            O`fundamental_domain:=FD_SL2;
+            
+        elif method eq "dirichlet" then
+            include_inv:=false;
+            inv_stable:=true;
+            fd := dirichlet_fd(O:include_inv := include_inv, inv_stable := inv_stable);
+            side_pair_infty:=side_pairing_infty(O,fd : include_inv:=include_inv);
+            stab_infty,gens_infty:=stabilizer_infty(O,fd,side_pair_infty);
+            group_generators,relations,G, side_pair, torsion_elements, polyhedron1, polyhedron2, edge2, next_step, side_pair_poly,FD_SL2:=sl2_data(O,fd,side_pair_infty,stab_infty,gens_infty);
+            assert forall{x: x in relations|&*[group_generators[AbsoluteValue(i)]^Sign(i): i in x] in [ScalarMatrix(cl,2,i): i in [1,-1]]};
+            
+            //caching
+            O`side_pair:=side_pair_poly;
+            O`fundamental_domain:=FD_SL2;
+        else
+            error "Not a valid method";
+            
+        end if;
+            
+        PSL2:=clifford_bianchi_group(O,[g: g in group_generators],relations); //this intrinsic takes generators and relations and forms the group.
         
-        PSL2O`sl2_to_psl2_map:=quot3*quot4; //I flipped this
-        
-        PSL2O`mat_to_unit:=mat_to_unit;
-        PSL2O`unit_to_mat:=unit_to_mat;
-        PSL2O`vec_to_mat:=vec_to_mat;
-        PSL2O`mat_to_vec:=mat_to_vec;
-        PSL2O`unit_to_sl2quo:=unit_to_sl2quo;
-        PSL2O`sl2quo_to_unit:=sl2quo_to_unit;
-        PSL2O`vec_to_sl2quo:=vec_to_sl2quo;
-        PSL2O`sl2quo_to_vec:=sl2quo_to_vec;
-        PSL2O`unit_to_psl2quo:=unit_to_psl2quo;
-        PSL2O`psl2quo_to_unit:=psl2quo_to_unit;
-        PSL2O`vec_to_psl2quo:=vec_to_psl2quo;
-        PSL2O`psl2quo_to_vec:=psl2quo_to_vec;
-        
-        //PSL2O`decompose_matrix:=decompose_matrix;
-        PSL2O`cusps:=cusp_set;
-
-        O`psl2:=PSL2O;
-        return O`psl2;
+            return PSL2;
     
     else
-        Error("Not implemented for orders which are not norm-Euclidean.");
+        error("Not implemented for orders which are not norm-euclidean and invariant under the star involution.");
     end if;
+
+end intrinsic;
+
+////////////////////
+intrinsic is_upper_triangular(g::AlgMatElt)->BoolElt
+////////////////////
+{Given a 2x2 matrix return true if upper triangular and false otherwise.}
+    if g[2,1] eq 0 then
+        return true;
+    else
+        return false;
+    end if;
+end intrinsic;
+
+
+////////////////////
+intrinsic clifford_bianchi_group(O::CliffOrd,group_generators::SeqEnum,relations::SeqEnum)->GrpPSL2Cliff
+////////////////////
+{This is the main intrinsic for instantiating the dictionaries used by other algorithms.
+This algorithm feeds into the clifford_bianchi_group intrinsics which build the generators and relations from data.}
+/*
+    INPUT:
+        --O, order in clifford algebra of positive definite quadratic form
+        --group_generators, 2x2 AlgClffElt matrices
+            *upper triangular ones are always generators for stabilizer of infinity
+            *last generator is the -id
+        --relations as a sequence of integers
+        
+    OUTPUT:
+        --GrpPSL2Cliff object (with mat_to_quo and quo_to_mat and other attributes populated so that the Manin symbol algorithms run)
+*/
+
+    PSL2O:=New(GrpPSL2Cliff);
+    
+    cl:=clifford_algebra(O);
+    GL2:=GL(2,get_algebra(cl));
+    
+    sl2_quo:=quo<FreeGroup(#group_generators)|relations>;
+    
+    //We need a better way of doing neg_mat that works for the random method
+    neg_mat:=Matrix(2,2,[cl|-1,0,0,-1]);
+    ind_neg_mat:=Index(group_generators,neg_mat);
+    //assert ind_neg_mat eq #group_generators;
+    
+    //vprintf Clifford,3: "neg_mat=%o...\n",neg_mat;
+    neg_fp:=sl2_quo.ind_neg_mat; //always the last spot
+    output_neg_mat :=evaluate_relation(group_generators,Eltseq(neg_fp));
+    vprintf Clifford,3: "%o , Parent %o\n",output_neg_mat, Parent(neg_mat);
+    assert Parent(output_neg_mat) eq Parent(neg_mat);
+    assert neg_mat eq output_neg_mat;
+    
+    psl2_quo<[g]>,quot_map:=quo<sl2_quo|neg_fp>;
+    //G2,quot3:=quo<sl2_quo|neg_fp>;
+    //psl2_quo<[g]>,quot4:=Simplify(G2);
+    //quot_map:=quot3*quot4;
+    //quot_map:=quot3;
+
+    mat_to_quo:=AssociativeArray();
+    quo_to_mat:=AssociativeArray();
+
+    for i in [1..#group_generators] do
+        mat_to_quo[group_generators[i]]:=sl2_quo.i;
+        quo_to_mat[sl2_quo.i]:=group_generators[i];
+        mat_to_quo[group_generators[i]^-1]:=sl2_quo.i^-1;
+        quo_to_mat[sl2_quo.i^-1]:=group_generators[i]^-1;
+    end for;
+    
+    mat_gens_stab:=[g : g in group_generators| is_upper_triangular(g)];
+    mat_gens_bottom:=[ g: g in group_generators | not g in mat_gens_stab];
+
+    rk:=get_arity(cl)+1;
+
+    t1:=Cputime();
+    unit_mats:=[decompose(g)[2] : g in mat_gens_stab];
+    rots,to_gl2:=sub<GL2|unit_mats>;
+    stab,to_sl2_quo:=sub<sl2_quo|[mat_to_quo[y] : y in mat_gens_stab]>;
+    ff:=hom<stab->rots|[decompose(g)[2] : g in mat_gens_stab]>;
+    trsub:=Kernel(ff);
+    vprintf Clifford, 3: "Computed the FPGrp for the additive part of the stabilizer of infinity in %o seconds...\n", Cputime(t1);
+
+    //make sure to evaluate with sl2_quo not stab!
+    assert &and[mat_gens_stab[i] eq evaluate_relation(group_generators, Eltseq(sl2_quo!stab.i)):i in [1..#mat_gens_stab]];
+
+    t2:=Cputime();
+    tv_units:=RightTransversal(stab,trsub);
+
+    assert #units(O) eq #tv_units;
+    vprintf Clifford, 3: "Computed an FPGrp transversal for the units in %o seconds...\n", Cputime(t2);
+
+    vectors:={};
+    for i in [1..#Generators(trsub)] do
+        fp_element:=sl2_quo! trsub.i;
+        translation:=evaluate_relation(group_generators,Eltseq(fp_element));
+        mat_to_quo[translation]:=fp_element;
+        quo_to_mat[fp_element]:=translation;
+        vectors:=vectors join {translation[1][2]};
+    end for;
+
+    magma_vectors:=[magma_vector(cl!v): v in vectors];
+    lat:=vec(O:small:=true);
+    lat0:=sub<lat|magma_vectors>;
+    assert lat eq lat0;
+
+    // AML: I'm not assuming it is a subset of the generators.
+    // However, I was assuming the coefficients are integral--not anymore.
+    lcm := LCM([Denominator(d): d in &cat [Eltseq(i): i in Set(magma_vectors)]]);
+    seq_mv := Setseq(Set(magma_vectors));
+    vec_mat := ChangeRing(lcm*Matrix(seq_mv),Z);
+    T_cvs := [translation_matrix(clifford_vector(cl,v)): v in seq_mv];
+    
+    tr_gens:=[];//wasn't initialized
+    
+    for v in Basis(lat0) do
+    
+      indp := Index(Rows(vec_mat),lcm*v);
+      indm := Index(Rows(vec_mat),-lcm*v);
+      if indp gt 0 then
+        sol := Vector([i eq indp select 1 else 0: i in [1..Nrows(vec_mat)]]);
+      elif indm gt 0 then
+        sol := Vector([i eq indm select -1 else 0: i in [1..Nrows(vec_mat)]]);
+      else
+        sol := Solution(vec_mat,ChangeRing(lcm*v,Z))[1];
+      end if;
+      
+      // optional: try harder to find a shorter solution
+      // note that the translation subgroup is abelian, so it shouldn't
+      // matter what order we take
+      t_v := &*[mat_to_quo[translation_matrix(clifford_vector(cl,seq_mv[i]))]^sol[i]: i in [1..Nrows(vec_mat)]];
+      Append(~tr_gens,t_v);
+      // let's not forget to put it in the arrays
+      quo_to_mat[t_v] := translation_matrix(clifford_vector(cl,v));
+      mat_to_quo[translation_matrix(clifford_vector(cl,v))] := t_v;
+      
+    end for;
+    
+    /*
+    -------------------
+    //VECTORS
+    -------------------
+    */
+
+    vec_to_quo:=AssociativeArray();
+    quo_to_vec:=AssociativeArray();
+
+    for v_clf in vec_basis(O) do
+        v:=magma_vector(cl!v_clf);
+        r:=Coordinates(lat0!v);
+        fp_element:=&*[(sl2_quo!tr_gens[i])^r[i]: i in [1..rk]];
+        mat:=&*[(quo_to_mat[sl2_quo!tr_gens[i]])^r[i]: i in [1..rk]];
+        
+        mat_to_quo[mat]:=fp_element;
+        quo_to_mat[fp_element]:=mat;
+        vec_to_quo[v_clf]:=fp_element;
+        quo_to_vec[fp_element]:=v_clf;
+        mat_to_quo[mat^(-1)]:=fp_element^(-1);
+        quo_to_mat[fp_element^(-1)]:=mat^(-1);
+        vec_to_quo[-v_clf]:=fp_element^(-1);
+    end for;
+    
+    function vec_to_quo_func(v)
+        vb:=vec_basis(O);
+        coords:=Coordinates(lat!magma_vector(cl!v));
+        return sl2_quo!&*[vec_to_quo[vb[i]]^coords[i] : i in [1..arity(cl)+1]];
+    end function;
+
+    /*
+    -------------------
+    //UNITS
+    -------------------
+    */
+
+    units_fp_seq:=[];
+    tv_units_bad:=[];
+    for r2 in tv_units do
+        mat2:=evaluate_relation(group_generators,Eltseq(sl2_quo!r2));
+        if is_upper_triangular(mat2) then
+            tau2,pi2:=Explode(decompose(mat2));
+            assert tau2*pi2 eq mat2;
+            assert pi2 eq ff(r2);
+            tau2_fp:=vec_to_quo_func(cl!tau2[1,2]);
+            assert evaluate_relation(group_generators,Eltseq(sl2_quo!tau2_fp)) eq tau2;
+            r2_fp:=sl2_quo!tau2_fp^-1*r2;
+            assert evaluate_relation(group_generators,Eltseq(r2_fp)) eq ff(r2);
+            Append(~units_fp_seq,r2_fp);
+        else
+            Append(~tv_units_bad,r2);
+        end if;
+    end for;
+
+    assert #units_fp_seq eq #rots;
+    assert #{ff(r) : r in units_fp_seq} eq #rots;
+
+    unit_to_quo:=AssociativeArray();
+    quo_to_unit:=AssociativeArray();
+    unit_to_mat:=AssociativeArray();
+    mat_to_unit:=AssociativeArray();
+
+    for r in units_fp_seq do
+        R:=ff(r);
+        u:=O!cl!R[1,1];
+        quo_to_mat[r]:=R;
+        mat_to_quo[R]:=r;
+        unit_to_quo[ u ]:=r;
+        quo_to_unit[r]:=u;
+    end for;
+    
+    inv_mat:=Matrix(2,2,[cl|0,-1,1,0]);
+    
+    assert inv_mat*inv_mat eq neg_mat;
+    assert neg_mat in mat_gens_stab;
+
+    /*
+    -------------------
+    //INVERSION
+    -------------------
+    */
+
+    g:=mat_gens_bottom[1];
+    g_fp:=mat_to_quo[g];
+
+    //we know that the last element will look like
+    //    neg_mat*inv_mat*g
+    //where g is upper triangular so
+    //(NB: neg_mat is in the center so we can absorb)
+    g_stab:=neg_mat*inv_mat*g;
+    tau,pi:=Explode(decompose(g_stab));
+    tau_fp:=vec_to_quo_func(cl!tau[1,2]);
+    pi_fp:=mat_to_quo[pi];
+    //assert evaluate_relation(group_generators,Eltseq(tau_fp)) eq tau;
+    //assert evaluate_relation(group_generators,Eltseq(pi_fp)) eq pi;
+    g_stab_fp:=tau_fp*pi_fp;
+    //assert evaluate_relation(group_generators,Eltseq(g_stab_fp)) eq g_stab;
+
+    //HENCE
+    inv_fp:=g_fp*g_stab_fp^-1;
+
+    mat_to_quo[inv_mat]:=inv_fp;
+    quo_to_mat[inv_fp]:=inv_mat;
+    
+    
+    /*
+    -------------------
+    //PSL2 ASSOCIATIVE ARRAYS
+    -------------------
+    */
+    
+    //Taylor: These are needed for the Manin symbol code to run.
+    
+    vec_to_psl2quo:=AssociativeArray();
+    psl2quo_to_vec:=AssociativeArray();
+    unit_to_psl2quo:=AssociativeArray();
+    psl2quo_to_unit:=AssociativeArray();
+    
+    for v in [k: k in Keys(vec_to_quo)] do
+        tv:=vec_to_quo[v];
+        vec_to_psl2quo[v]:=quot_map(tv);
+        psl2quo_to_vec[quot_map(tv)]:=v;
+    end for;
+    
+    for u in [k: k in Keys(unit_to_quo)] do
+        u_fp:=unit_to_quo[u];
+        unit_to_psl2quo[u]:=quot_map(u_fp);
+        psl2quo_to_unit[quot_map(u_fp)]:=u;
+    end for;
+    
+    /*
+    -------------------
+    //PSL2 VERSIONS
+    -------------------
+    */
+    
+    
+    PSL2O`gl2:=GL2; //needs to be defined
+    PSL2O`matrix_group:=sub<GL2|group_generators>; //needs to be defined
+    
+    cl_magma:=get_algebra(cl);
+    PSL2O`matrix_algebra:=MatrixAlgebra(cl_magma,2); //needs to be defined
+        
+    PSL2O`clifford_order:=O;
+    PSL2O`clifford_algebra:=cl;
+    PSL2O`relations:=relations;
+
+    PSL2O`sl2_fp_group:=sl2_quo;
+    PSL2O`psl2_fp_group:=psl2_quo; //duplicate
+    PSL2O`sl2_to_psl2_fp:=quot_map; //duplicate
+    PSL2O`fp_group:=psl2_quo;
+    
+    //PSL2O`sl2_to_psl2_map:=quot3*quot4;
+    PSL2O`sl2_to_psl2_map:=quot_map; //we don't simplify anymore
+    
+    PSL2O`sl2quo_to_mat:=quo_to_mat;
+    PSL2O`mat_to_sl2quo:=mat_to_quo;
+    //PSL2O`psl2quo_to_mat:=psl2quo_to_mat; //not implemented
+    PSL2O`psl2quo_to_mat:=AssociativeArray();
+    for k in Keys(PSL2O`sl2quo_to_mat) do
+      PSL2O`psl2quo_to_mat[PSL2O`sl2_to_psl2_map(k)] := PSL2O`sl2quo_to_mat[k];
+    end for;
+    PSL2O`mat_to_psl2quo:=AssociativeArray();
+    for i in Keys(mat_to_quo) do
+      PSL2O`mat_to_psl2quo[i] := quot_map(mat_to_quo[i]);
+    end for;
+    
+    PSL2O`matrix_generators:=group_generators;
+    
+    //All of these will be instantiated.
+    //PSL2O`mat_to_unit:=mat_to_unit;
+    //PSL2O`unit_to_mat:=unit_to_mat;
+    //PSL2O`vec_to_mat:=vec_to_mat;
+    //PSL2O`mat_to_vec:=mat_to_vec;
+    PSL2O`unit_to_sl2quo:=unit_to_quo; //not implemented?
+    PSL2O`sl2quo_to_unit:=quo_to_unit;
+    PSL2O`vec_to_sl2quo:=vec_to_quo; //not implemented?
+    PSL2O`sl2quo_to_vec:=quo_to_vec;
+    
+    PSL2O`unit_to_psl2quo:=unit_to_psl2quo; //not implemented?
+    PSL2O`psl2quo_to_unit:=psl2quo_to_unit;
+    PSL2O`vec_to_psl2quo:=vec_to_psl2quo; //not implemented?
+    PSL2O`psl2quo_to_vec:=psl2quo_to_vec;
+    
+    PSL2O`cusps:=cusps(cl);
+    
+    //%%%%%%%%%%%%%%%%%
+    function sl2quo_to_mat_func(my_word)
+    //%%%%%%%%%%%%%%%%
+        return evaluate_word_to_matrix(my_word,PSL2O`sl2quo_to_mat,PSL2O`sl2_fp_group);
+    end function;
+    
+    //%%%%%%%%%%%%%%%%%
+    function psl2quo_to_mat_func(my_word)
+    //%%%%%%%%%%%%%%%%
+        return evaluate_word_to_matrix(my_word,PSL2O`psl2quo_to_mat,PSL2O`psl2_fp_group);
+    end function;
+
+    PSL2O`sl2quo_to_mat_func := sl2quo_to_mat_func;
+    PSL2O`psl2quo_to_mat_func := psl2quo_to_mat_func;
+    
+    return PSL2O;
+
+end intrinsic;
+
+
+//###############################################
+intrinsic get_clifford_order(Sigma::GrpPSL2Cliff) -> CliffOrd
+//################################################
+{Alias for clifford_order}
+    return clifford_order;
+
+end intrinsic;
+
+//###############################################
+intrinsic clifford_order(Sigma::GrpPSL2Cliff) -> CliffOrd
+//################################################
+{
+Return the underlying order of a group.
+}
+
+    return Sigma`clifford_order;
+
+end intrinsic;
+
+//###############################################
+intrinsic fp_group(Sigma::GrpPSL2Cliff) -> GrpFP
+//################################################
+{
+Return the finitely presented group associated to the PSL2OGrpCliff object.
+}
+
+    return Sigma`fp_group;
+
+end intrinsic;
+
+
+//###############################################
+intrinsic SL2_fp(Sigma::GrpPSL2Cliff) -> GrpFP
+//################################################
+{
+Return the finitely presented group associated to the PSL2OGrpCliff object.
+}
+
+    return Sigma`sl2_fp_group;
 
 end intrinsic;
 
 //###############################################
 intrinsic get_cusps(Sigma::GrpPSL2Cliff) -> GrpFP
 //################################################
-{
-
-Return the SetCspCliff associated to the group Sigma.
-
-}
+{Return the SetCspCliff associated to the group Sigma.}
     return Sigma`cusps;
-
 end intrinsic;
 
 //################################################
 intrinsic vec_to_psl2quo(PSL2O::GrpPSL2Cliff,alpha::CliffAlgElt)->GrpFPElt
 //################################################
-{}
+{Signature for vec_to_psl2quo}
   return vec_to_psl2quo(PSL2O,get_clifford_order(PSL2O)!alpha);
 end intrinsic;
 
 //################################################
 intrinsic vec_to_psl2quo(PSL2O::GrpPSL2Cliff,alpha::AlgClffElt)->GrpFPElt
 //################################################
-{}
+{Signature for vec_to_psl2quo}
   return vec_to_psl2quo(PSL2O,get_clifford_order(PSL2O)!alpha);
 end intrinsic;
 
 //################################################
 intrinsic vec_to_psl2quo(PSL2O::GrpPSL2Cliff,alpha::CliffOrdElt)->GrpFPElt
 //################################################
-{}
-/*
-    INPUT:
-        --alpha, an element of vec(O)
-    OUTPUT:
-        --an element of SL2O_quo representing translation by alpha
-        
-        
-    EXAMPLES:
-        a:=I[1]+I[2]/4;
-        alpha:=closest_vector(O,a);
-        alpha_quo:=vec_to_psl2quo(PSL2O,alpha);
-        alpha_matrix:=fp_element_to_matrix(PSL2O,alpha_quo);
-        translation_matrix(alpha) eq alpha_matrix;
-        
-        There was an issue with negative exponents so I added this test case.
-        
-        alpha := I[1]-2*I[2];
-        vec_to_psl2quo(PSL2O,alpha);
-        y[3]^-1 * y[2]^-1 * y[3]^2 * y[2]^-2 * y[3]^-1 // output varies
-        
-        Here is another case where I had to add something to test zero.
-        
-        x:=I[1]/5-I[2]/4;
-        z:=closest_vector(O,x);
-        z eq 0;
-        vec_to_psl2quo(PSL2O,z) eq Identity(fp_group(PSL2O));
-*/
+{ Input: alpha, an element of vec(O). Output: An element of SL2O_quo representing translation by alpha.}
   O := get_clifford_order(PSL2O);
     vecO_basis:=vec_basis(O);
 
@@ -711,9 +927,25 @@ intrinsic unit_to_psl2quo(PSL2O::GrpPSL2Cliff,u::CliffOrdElt)->GrpFPElt
 end intrinsic;
 
 
+intrinsic decompose(g::AlgMatElt)->SeqEnum
+{}
+/*
+g0:=mat_gens_sl2[4];
+g0 eq decompose(g0)[1]*decompose(g0)[2];
+g0;
+decompose(g0)[1];
+decompose(g0)[2];
+*/
+    cl_mag:=Parent(g[1,1]);
+    require is_upper_triangular(g):"matrix must be upper triangular";
+    pi_u:=Matrix(2,2,[cl_mag|g[1,1],0,0,g[2,2]]);
+    tau_v:=Matrix(2,2,[cl_mag|1,g[1,2]*g[2,2]^(-1),0,1]);
+    return [tau_v,pi_u];
+end intrinsic;
 
 
-
+// AML: this prints an unnecessary strictly upper triangular matrix somewhere,
+// namely at the end of the intrinsic.  Commented out.
 //####################
 intrinsic decompose_matrix(PSL2O::GrpPSL2Cliff, my_mat::AlgMatElt : verbose:=false)->AlgMatElt,AlgMatElt,AlgMatElt,GrpFPElt,GrpFPElt,GrpFPElt
 //####################
@@ -886,7 +1118,8 @@ another valid convention.
     
     //----printing----
     vprintf Clifford, 4: "translation =%o\n",v;
-    C_mat*u_mat^(-1);
+    // commented out to reduce spam
+    // C_mat*u_mat^(-1);
 
     
     v_mat:=Matrix(2,2,[cl!1,cl!v,cl!0,cl!1])^(-1);
@@ -895,44 +1128,6 @@ another valid convention.
     return B_mat,v_mat,u_mat, B_quo, v_quo, u_quo;
 end intrinsic;
 
-
-//###############################################
-intrinsic get_clifford_order(Sigma::GrpPSL2Cliff) -> CliffOrd
-//################################################
-{}
-
-    return Sigma`clifford_order;
-
-end intrinsic;
-
-//###############################################
-intrinsic fp_group(Sigma::GrpPSL2Cliff) -> GrpFP
-//################################################
-{
-
-Return the finitely presented group associated to the PSL2OGrpCliff object.
-
-}
-
-    return Sigma`fp_group;
-
-end intrinsic;
-
-//###############################################
-intrinsic supergroup(Sigma::GrpPSL2Cliff) -> GrpPSL2Cliff
-//################################################
-{
-
-Return the finitely presented group associated to the PSL2OGrpCliff object. We define the super_group to be itself in a call. I think if we did this in the initial instantiation (where New(MyType) is created) then there would be an self referencing issue i.e. doing X:=New(MyType); X`my_attribute:=X; is not allowed.
-
-}
-    if is_supergroup(Sigma) then
-        Sigma`supergroup:=Sigma;
-    end if;
-    
-    return Sigma`super_group;
-
-end intrinsic;
 
 //###############################################
 intrinsic SubConstructor(Sigma::GrpPSL2Cliff, t::.) -> GrpPSL2Cliff
@@ -1007,12 +1202,21 @@ Return underlying clifford order (CliffOrd) associated to an arithmetic group Gr
 end intrinsic;
 
 //#########################
-intrinsic get_clifford_algebra(PSL2O::GrpPSL2Cliff)->CliffAlg
+intrinsic clifford_algebra(PSL2O::GrpPSL2Cliff)->CliffAlg
 //#########################
 {
 Return underlying clifford algebra (CliffAlg) associated to an arithmetic group GrpPSL2Cliff type
 }
     return PSL2O`clifford_algebra;
+end intrinsic;
+
+//#########################
+intrinsic get_clifford_algebra(PSL2O::GrpPSL2Cliff)->CliffAlg
+//#########################
+{
+Alias for intrinsic clifford_algebra.
+}
+    return clifford_algebra(PSL2O);
 end intrinsic;
 
 
@@ -1041,6 +1245,7 @@ This uses a decomposition.
         M_quo:=B_quo*v_quo*u_quo;
         PSL2O`mat_to_psl2quo[M]:=M_quo;
         PSL2O`psl2quo_to_mat[M_quo]:=M;
+    else vprint Clifford, 5: "looking up matrix in cache";
     end if;
     
     return PSL2O`mat_to_psl2quo[M];
@@ -1053,11 +1258,17 @@ intrinsic matrix_to_fp_element(T::GrpPSL2Cliff, x::AlgMatElt) -> GrpFPElt
     return mat_to_psl2quo(T,x);
 end intrinsic;
 
+//######################
+intrinsic matrix_to_fp_element(T::GrpPSL2Cliff, x::GrpPSL2CliffElt) -> GrpFPElt
+//######################
+{Creates a GrpFPElt from a matrix group element.}
+  return mat_to_psl2quo(T,x`matrix);
+end intrinsic;
 
 //######################
 intrinsic fp_element_to_matrix(PSL2O::GrpPSL2Cliff, x::GrpFPElt) -> AlgMatElt
 //######################
-{Creates a GrpPSL2CliffElt object with parent T and element x.}
+{Creates a AlgMatElt from an element of the finitely presented versions of psl2 or sl2.}
     if x in PSL2O`psl2_fp_group then
         x_quo:=x;
         if not (x_quo in Keys(PSL2O`psl2quo_to_mat)) then
@@ -1204,7 +1415,7 @@ This just uses a coercion to the AlgCliffElt version.
     return get_convergents(PSL2O,clf!y);
 end intrinsic;
 
-
+/*
 //###############################################
 intrinsic is_supergroup(Sigma::GrpPSL2Cliff) -> BoolElt
 //################################################
@@ -1214,7 +1425,7 @@ intrinsic is_supergroup(Sigma::GrpPSL2Cliff) -> BoolElt
     return Sigma`is_supergroup;
 
 end intrinsic;
-
+*/
 
 
 /*
@@ -1239,6 +1450,11 @@ intrinsic matrix_group(PSL2O::GrpPSL2Cliff) -> GrpMat
 Return the matrix group associated to the PSL2OGrpCliff object.
 
 }
+    if not assigned PSL2O`sl2_matrix_group then
+        cl:=clifford_algebra(clifford_order(PSL2O));
+        GL2:=GeneralLinearGroup(2,get_algebra(cl));
+        PSL2O`sl2_matrix_group:=sub<GL2|[GL2!g: g in Generators(PSL2O)]>;
+    end if;
 
     return PSL2O`sl2_matrix_group;
 
@@ -1273,35 +1489,152 @@ Call FiniteIndexSubgroups on the finitely presented group associated to Sigma.
 end intrinsic;
 
 //####################
-intrinsic Gamma0_fp(PSL2O::GrpPSL2Cliff,alpha::AlgMatElt : len:=20,num_rels := 1000,batch_size := 1000) -> GrpFP, Map, SeqEnum
+intrinsic sl2_fp(PSL2O::GrpPSL2Cliff)->GrpFP
 //####################
 {}
+    return PSL2O`sl2_fp_group;
+end intrinsic;
+
+
+//####################
+intrinsic Gamma0_fp(PSL2O::GrpPSL2Cliff,alpha::AlgMatElt : len:=20,num_rels := 1000,batch_size := 1000,redo := false, method:="rs_fp") -> GrpFP, Map, SeqEnum
+//####################
+{Methods can be "random","from_disc","rs_fp","rs_mat" where the later ones stand for Reidemeister-Schreier algorithm which comes in the flavor for finitely presented groups or for matrix groups. In practice the finitely presented version runs faster.\n\n
+
+Claim: With a test on the index this intrinsic computes Gamma0(alpha).\n\n
+
+Proof: Clearly what is computed is a subgroup of Gamma0(alpha). If the subgroup has the right index it is the whole thing, and that is what happens.\n\n
+
+We then use canonical_cosets followed by rs_fp to get a canonical presentation. (NOT IMPLEMENTED HERE)
+
+}
+
+    // computes the presentation using only FP-group information
+    //%%%%%%%%%%%%%%%%%%%
+    function gamma0_fp(G,beta,psl,cl,ord)
+    //%%%%%%%%%%%%%%%%%%%    
+      vprint Clifford, 4: "really entering Reidemeister-Schreier for finitely presented groups...\n";
+      
+      test := func<g|forall{r: r in Eltseq(beta^-1*m*beta)|r in ord} where m is &*[fp_element_to_matrix(PSL2O,G.i): i in [0] cat Eltseq(G!g)]>;
+      sl2_quo:=G;
+      ct,tv := coset_table(sl2_quo,test:limit := 10^6);
+      assert IsSatisfied(Relations(sl2_quo),ct);
+      h := hom<sl2_quo->SymmetricGroup(#tv)|ct>;
+      gamma0 := sub<sl2_quo|h>;
+      //tv2,get_rep:=RightTransversal(sl2_quo,gamma0);
+     
+      vprint Clifford, 4: "gamma0 computed";
+      
+      assert forall{x: x in Generators(gamma0)|test(x)};
+      
+      // This presents the finite-index subgroup, such as Gamma_0(p).
+      // However, it appears to have a bug.
+      
+      tv_can:=tv;
+      //tv_can:=tv2;
+      //tv_can:=canonical_cosets(sl2_quo,gamma0,get_rep,lex_comparison);
+      
+      pres,pres_to := presentation(sl2_quo,ct,tv_can,test); //canonical cosets goes here
+      assert Image(pres_to) eq gamma0;
+      
+      // make sure that the relations are as expected
+      assert forall{x: x in Relations(pres)|&*[fp_element_to_matrix(PSL2O,sl2_quo.i): i in [0] cat Eltseq(pres_to(LHS(x)*RHS(x)^-1))] in [ScalarMatrix(2,cl!i): i in [1,-1]]};
+      
+      assert AQInvariants(gamma0) eq AQInvariants(pres);
+      
+      return pres,pres_to;
+    end function;
+
+    // computes the presentation using matrices--maybe faster
+    //%%%%%%%%%%%%%%%%%%%
+    function gamma0_mat(G,beta,psl,cl,ord)
+    //%%%%%%%%%%%%%%%%%%%
+      test := func<g|forall{r: r in Eltseq(beta^-1*m*beta)|r in ord} where m is &*[fp_element_to_matrix(PSL2O,G.i): i in [0] cat Eltseq(G!g)]>; //there is a problem with this I don't understand.
+      test_m := func<m|forall{r: r in Eltseq(beta^-1*m*beta)|r in ord}>;
+      ctm,tvm := coset_table_matrices(G,test_m,psl`sl2quo_to_mat,cl); //psl`sl2quo_to_mat should maybe be the map x -> fp_element_to_matrix(PSL2O,x)
+      tvm_comb := [<&*[G|G.(i gt Ngens(G) select Ngens(G)-i else i): i in t[2]],t[2]>: t in tvm];
+      h := hom<G->SymmetricGroup(#tvm)|ctm[1..Ngens(G)]>;
+      gamma0 := sub<G|h>;
+      // The Reidemeister-Schreier algorithm wants things to be in an FP-group,
+      // not a group of matrices.  tvm_comb is a combinatorial version of the
+      // transversal calculated in terms of matrices.
+      pres,pres_to := presentation(G,ctm,tvm_comb,test);
+
+      assert Image(pres_to) eq gamma0;
+      // make sure that the relations are as expected
+      assert forall{x: x in Relations(pres)|&*[psl`sl2quo_to_mat[G.i]: i in [0] cat Eltseq(pres_to(LHS(x)*RHS(x)^-1))] in [ScalarMatrix(2,cl!i): i in [1,-1]]};
+      assert AQInvariants(gamma0) eq AQInvariants(pres);
+      return pres,pres_to;
+    end function;
+
+
     if not assigned PSL2O`gamma0fp_dict then
+        vprint Clifford, 4: "creating a dictionary of gamma0 subgroups...\n";
         PSL2O`gamma0fp_dict:=AssociativeArray();
     end if;
     
-    if not alpha in Keys(PSL2O`gamma0fp_dict) then
+    if not alpha in Keys(PSL2O`gamma0fp_dict) or redo then
+    
+        vprint Clifford, 4: "alpha is not a key in our dictionary...\n computing... \n";
+            
+        if method eq "random" then
+            O:=get_clifford_order(PSL2O);
+            cl:=get_clifford_algebra(O);
+            
+            //For the get_relations
+            mat_gens:=PSL2O`matrix_generators;
+            mat_gens:= mat_gens join {@ g^-1 : g in mat_gens @};
+            
+            SL2O_quo:=PSL2O`sl2_fp_group;
+            quo_gens:={@ PSL2O`mat_to_sl2quo[g] : g in mat_gens @};
+            
+            inverse:={@ Index(mat_gens,g^(-1)):g in mat_gens @};
 
-        O:=get_clifford_order(PSL2O);
-        cl:=get_clifford_algebra(O);
+            Gamma0_test:=get_Gamma0_test(O,alpha);
+            //this is a UserProgram
+            //it tests membership in Gamma0
+            //see package-relations.mag
+            
+            random_rels:=get_relations(mat_gens,inverse,Gamma0_test :len:=len, batch_size:=batch_size, num_rels:=num_rels);
+            trivial_rels:=get_trivial_relations(mat_gens,inverse);
+            all_rels:=random_rels cat trivial_rels;
+
+            //make the group
+            
+            Gamma0_gens:=[evaluate_relation(quo_gens,my_rel) : my_rel in all_rels];
+            Gamma0_gens_mat:=[evaluate_relation(mat_gens,my_rel) : my_rel in all_rels];
+            fp_group,map:=sub<SL2O_quo|Gamma0_gens>;
+            PSL2O`gamma0fp_dict[alpha]:=<fp_group,map,Gamma0_gens_mat>;
         
-        //For the get_relations
-        mat_gens:=PSL2O`matrix_generators;
-        inverse:=[Index(mat_gens,g^(-1)):g in mat_gens];
+        else
+            psl:=PSL2O;
+            G := psl`sl2_fp_group;
+            ord:=clifford_order(psl);
+            cl:=clifford_algebra(ord);
+        
+            if method eq "rs_mat" then
+                pres2,pres2_to := gamma0_mat(G,alpha,psl,cl,ord);
+                sg,sgto := Simplify(pres2);
+                lg,lgto := SimplifyLength(sg);
+                
+                map:=lgto*sgto*pres2_to;
+                Gamma0_gens_mat:=[fp_element_to_matrix(psl,map(g)):g in Generators(lg)];
+                PSL2O`gamma0fp_dict[alpha]:=<lg,map,Gamma0_gens_mat>;
+                
+            elif method eq "rs_fp" then
+                vprint Clifford, 4: "entering Reidemeister-Schreier for finitely presented groups...\n";
+                pres1,pres1_to := gamma0_fp(G,alpha,psl,cl,ord);
+                sg,sgto := Simplify(pres1);
+                lg,lgto := SimplifyLength(sg);
+                map:=lgto*sgto*pres1_to;
+                Gamma0_gens_mat:=[fp_element_to_matrix(psl,map(g)):g in Generators(lg)];
+                PSL2O`gamma0fp_dict[alpha]:=<lg,map,Gamma0_gens_mat>;
+                
+            end if;
 
-        //alpha:=Matrix(2,2,[cl!p,cl!0,cl!0,cl!1]);
-        Gamma0_test:=get_Gamma0_test(O,alpha);
-        random_rels:=get_relations(mat_gens,inverse,Gamma0_test :len:=len, batch_size:=batch_size, num_rels:=num_rels);
-        trivial_rels:=get_trivial_relations(mat_gens,inverse);
-        all_rels:=random_rels cat trivial_rels;
-
-        //make the group
-        SL2O_quo:=PSL2O`sl2_fp_group;
-        quo_gens:=[PSL2O`mat_to_sl2quo[g] : g in mat_gens];
-        Gamma0_gens:=[evaluate_relation(quo_gens,my_rel) : my_rel in all_rels];
-        Gamma0_gens_mat:=[evaluate_relation(mat_gens,my_rel) : my_rel in all_rels];
-        fp_group,map:=sub<SL2O_quo|Gamma0_gens>;
-        PSL2O`gamma0fp_dict[alpha]:=<fp_group,map,Gamma0_gens_mat>;
+        
+        end if;
+        
     end if;
     
         data:=PSL2O`gamma0fp_dict[alpha];
@@ -1310,28 +1643,14 @@ intrinsic Gamma0_fp(PSL2O::GrpPSL2Cliff,alpha::AlgMatElt : len:=20,num_rels := 1
 end intrinsic;
 
 
-
-
-/*
-THIS IS THE VERSION THAT WE SHOULD REALLY BE DOING
-
-//###############################################
-intrinsic low_index_subgroups(Sigma::GrpPSL2Cliff,index::RngIntElt) -> SeqEnum // [GrpPSL2Cliff]
-//################################################
-{
-
-Get the low index subgroups of a given subquotient of PSL2O for O an order in a Clifford algebra.
-
-}
-    
-    Sigma_fp:=fp_group(Sigma);
-    subs:=LowIndexSubgroups(Sigma_fp,index);
-    return [sub<Sigma|G> : G in subs]; //this depends on low_index_subgroups working the way it should.
-    //It is unclear how the morphism should be involved.
-
+//####################
+intrinsic Gamma0_fp(PSL2O::GrpPSL2Cliff,alpha::GrpMatElt : len:=20,num_rels := 1000,batch_size := 1000,redo := false, method:="rs_fp") -> GrpFP, Map, SeqEnum
+//####################
+{}
+    cl_mag:=get_algebra(clifford_algebra(clifford_order(PSL2O)));
+    M:=MatrixAlgebra(cl_mag,2);
+    return Gamma0_fp(PSL2O,M!alpha: len:=len,num_rels := num_rels,batch_size := batch_size,redo := redo, method:=method);
 end intrinsic;
-*/
-
 
 //###############################
 intrinsic Print(X::GrpPSL2Cliff)
@@ -1341,7 +1660,7 @@ intrinsic Print(X::GrpPSL2Cliff)
 The Print Statement for GrpPSL2Cliff
 
 }
-    printf "A subquotient of PSL2(O) GrpPSL2Cliff object where O is %o.", X`clifford_order;
+    printf "SL2(O) where O is %o.", X`clifford_order;
     
 end intrinsic;
 
@@ -1358,6 +1677,27 @@ intrinsic random_matrix(PSL2O::GrpPSL2Cliff : len:=20)->AlgMatElt
     end function;
 
     return &*[mats[random_index()] : i in [1..len]];
+end intrinsic
+
+//#####################
+intrinsic matrix_generators(PSL2O::GrpPSL2Cliff)->SeqEnum
+//#####################
+{Returns the matrix generators of SL2O as a matrix group. Note that this is SL2(O) not PSL2(O).}
+    return PSL2O`matrix_generators;
+end intrinsic
+
+//#####################
+intrinsic Generators(PSL2O::GrpPSL2Cliff)->SeqEnum
+//#####################
+{Returns the matrix generators of SL2O as a matrix group. Note that this is SL2(O) not PSL2(O).}
+    return matrix_generators(PSL2O);
+end intrinsic
+
+//#####################
+intrinsic Relations(PSL2O::GrpPSL2Cliff)->SeqEnum
+//#####################
+{Returns the matrix generators of SL2O as a matrix group. Note that it is SL2(O) not PSL2(O).}
+    return PSL2O`relations;
 end intrinsic
 
 
@@ -1382,4 +1722,301 @@ intrinsic random_fp_group_element( G::GrpFP : len:=20)->GrpFPElt
 //#####################
 {}
     return random_product(Generators(G) : len:=len);
+end intrinsic;
+
+//#####################
+intrinsic prune( G::GrpFP, psl::GrpPSL2Cliff)->GrpFP
+//#####################
+{Reduce the set of generators of a group, to make it less cumbersome for Magma's built-ins.  It may not be necessary to use this.}
+  vprint Clifford, 1: "It may not be necessary to use this function.  Consider just using Magma's built-in Rewrite.";
+  sl2 := psl`sl2_fp_group;
+  // the 0 is to make sure the universe gets set
+  to_mat := func<g|&*[psl`sl2quo_to_mat[psl`sl2_fp_group.i]: i in [0] cat Eltseq(psl`sl2_fp_group!g)]>;
+  vprint Clifford, 4: "multiplying out", Ngens(G), "words";
+  mats := [to_mat(G.i): i in [1..Ngens(G)]];
+  matset := {@x: x in mats@};
+  plusinds := [Index(mats,m): m in matset];
+  minusinds := [Index(mats,-m): m in matset];
+  min_no0 := func<x,y|0 in [x,y] select x+y else Min(x,y)>;
+  mins := Sort({@min_no0(plusinds[i],minusinds[i]): i in [1..#matset]@});
+  vprint Clifford, 4: "reducing to", #mins, "distinct matrices";
+  mat_mins := {@mats[i]: i in mins@};
+  inv_mins := {@i^-1: i in mat_mins@};
+  drops := {};
+  vprintf Clifford, 4: "removing obvious products ";
+  for i in [#mins..1 by -1] do
+    // not sure what the optimal order is for the loop
+    if exists{r: m1,m2 in [mat_mins,inv_mins],r in [1..i-1],s in [1,-1]|(ind ne 0 and ind lt i) where ind is Index(m2,s*mat_mins[i]*m1[r])} then
+      // I'm assuming that the generators get bigger as we go along, which may not be true
+      Include(~drops,i);
+      vprintf Clifford, 5: "+";
+    end if;
+    if i mod 100 eq 0 then vprintf Clifford, 6: "."; end if;
+  end for;
+  vprintf Clifford, 4: "\nfound %o matrices to remove\n", #drops;
+  keeps := {1..#mins} diff drops;
+  keep_mins := [mins[i]: i in Sort(Setseq(keeps))];
+  g_red := sub<psl`sl2_fp_group|[G.i: i in keep_mins]>;
+  // assert Index(sl2,g_red) eq Index(sl2,G);
+  return g_red;
+end intrinsic;
+
+////////////////////
+intrinsic matn_tuple_to_sl2(O::CliffOrd,tup:Tup)->AlgMatElt
+////////////////////
+{Converts an element of the semidirect product as a tuple of (b,A) representing the map x->(x+b)*A to a SL2(O) element where O is an order in a clifford algebra. The element sequence of b corresponds to a clifford vector in the clifford order and A corresponds to multiplication by a unit.}
+    cl:=clifford_algebra(O);
+    b:=tup[1];
+    A:=tup[2];
+    //the action to be a left action
+    u:=O`matn_to_unit[Transpose(A)];
+    v:=O!clifford_vector(cl,b);
+    pi_u:=rotation_matrix(u);
+    tau_v:=translation_matrix(v);
+    return pi_u*tau_v;
+end intrinsic;
+
+////////////////////
+intrinsic lift_relations(mat_gens::SeqEnum,rels::SeqEnum)->SeqEnum,SeqEnum
+////////////////////
+{Takes relations for matrices which can return \pm the identity and returns a new set of matrices with -id as the last entry and a new set of relations that work on the nose. This is for lifting the presentation of psl2 to sl2.}
+    id_mat:=mat_gens[1]*mat_gens[1]^(-1);
+    neg_mat:=-id_mat;
+    new_rels:=[];
+    if neg_mat in mat_gens then
+        last:=Index(mat_gens,neg_mat);
+        new_mat_gens:=mat_gens;
+    else
+        last:=#mat_gens+1;
+        new_mat_gens:=mat_gens cat [neg_mat];
+    end if;
+    
+    for r in rels do
+        output:=evaluate_relation(mat_gens,r);
+        if output eq id_mat then
+            Append(~new_rels,r);
+        else
+            Append(~new_rels,r cat [last]);
+        end if;
+    end for;
+
+    if last eq #mat_gens+1 then
+        for i in [1..#mat_gens] do
+            rel:=[i,last,-i,last];
+            if not rel in rels then //we should really be checking if it is the identity in the FP group because any cyclic permutation of this works
+                Append(~new_rels,rel);
+            end if;
+        end for;
+    else
+        for i in [i : i in [1..#mat_gens] | i ne last] do
+            rel:=[i,last,-i,last];
+            if not rel in rels then
+                Append(~new_rels, rel);
+            end if;
+        end for;
+    end if;
+    
+    if not [last,last] in rels then
+        Append(~new_rels,[last,last]);
+    end if;
+    
+    return new_mat_gens,new_rels;
+end intrinsic;
+
+// AML 26/09/2024: I'll implement Reidemeister-Schreier so that we can find
+// presentations of subgroups.
+// 27/09/2024: no, no need.  I think Rewrite does everything we want.
+/* For example:
+AttachSpec("hecke.spec");
+cl := clifford_algebra(3,Q);
+ord := get_maximal_orders(cl)[1];
+psl := clifford_bianchi_group(ord);
+G := psl`sl2_fp_group;
+beta := Matrix(2,2,[cl|1+2*cl.2,0,0,1-2*cl.2]);        
+g1,g1map,elts1 := Gamma0_fp(psl,beta: num_rels := 40000, batch_size := 2500, len := 30);
+assert Index(G,g1) eq 156;
+time rew := Rewrite(G,g1);
+// and Magma still knows how to coerce elements of rew into G and g1
+tp := TietzeProcess(rew);
+// reduces the length of the presentation by 1/3, as measured by #Sprintf
+SimplifyPresentation(~tp); 
+grew,gmap := Group(tp);
+// and now grew is a group isomorphic to rew and gmap is the isomorphism
+*/
+
+/* I did a larger example with the element 3+2i+2j of norm 17.
+After increasing the parameters to Gamma0_fp it found index 5220 = 
+17^3 + 17^2 + 17 + 1 as expected.  Applying prune took 40 minutes to
+give a presentation on 1221 generators, which Rewrite cut to 15 in 30 seconds,
+and then SimplifyPresentation used 10 seconds to remove 1 generator and 
+6 relations.  The abelianization is (Z/2Z)^10 + Z/48Z, for what it's worth.
+
+However, just calling Rewrite on g1 directly took only 35 seconds and got
+to the same place, so the prune intrinsic above may not be useful.  What
+we really need is a better way to generate the congruence subgroups.
+*/
+
+function make_lower_left(cl,ord,beta,a,d,b)
+  if b eq 0 then
+    return a*cl`star(d) eq 1, cl!0;
+  end if;
+  myc := cl`star((cl!b)^-1*(a*cl`star(d)-cl!1));
+  return beta[1,1]*myc*(beta^-1)[2,2] in ord and myc in ord, myc;
+end function;
+
+// NB this assumes that beta is diagonal
+function make_random_elts(psl,cl,ord,beta,bd,n_elts: found_elts := {@@})
+  if #found_elts ge n_elts then return found_elts; end if;
+  binv := beta^-1;
+  ord_elts := [ord|[r,s,t,u]: r,s,t,u in [-bd..bd]];
+  poss_a := [x: x in ord_elts|beta[2,2]*x*binv[2,2] in ord];
+  poss_d := [x: x in ord_elts|beta[1,1]*x*binv[1,1] in ord];
+  poss_b := [x: x in ord_elts|beta[2,2]*x*binv[1,1] in ord];
+
+  done_pairs := {@[x[1,1],x[2,2]]: x in found_elts@};
+  vprint Clifford, 4: "finished setting up, getting started";
+  while #found_elts lt n_elts do
+    repeat
+      a := Random(poss_a);
+      d := Random(poss_d);
+      if [a,d] in done_pairs then continue; end if;
+      // I'm sure one could do better by imposing some requirements on
+      // norm here already
+      // b := Random(poss_b);
+      Include(~done_pairs,[a,d]);
+      avail_b := [b: b in poss_b|(b ne 0 and cl`is_vec(b*cl`star(a)) and cl`is_vec(cl`star(b)*d) and IsDivisibleBy(n,Z!Eltseq(nm(b))[1])) or (b eq 0 and a*d eq cl!1)] where n is Z!Eltseq(nm(a*cl`star(d)-cl!1))[1];
+      until #avail_b gt 0;
+    vprintf Clifford, 6: ".";
+    for b in avail_b do 
+      ism,c := make_lower_left(cl,ord,beta,a,d,b);
+      if ism then
+        vprint Clifford, 5: "found new matrix";
+        mat := Matrix(2,2,[cl|a,b,c,d]);
+        psl_elt := make_psl2_group_elt(psl,mat);
+        if psl_elt notin found_elts then
+          Include(~found_elts,psl_elt);
+          if #found_elts mod 100 eq 0 then vprint Clifford, 2: "found", #found_elts, "matrices so far"; end if;
+        end if;
+      end if;
+    end for;
+  end while;
+  return found_elts;
+end function;
+
+// NB this assumes that beta is diagonal
+function make_random_elts_0(psl,cl,ord,beta,bd,n_elts: found_elts := {@@})
+  if #found_elts ge n_elts then return found_elts; end if;
+  binv := beta^-1;
+  bas := Basis(ord`magma_order);
+  ord_elts := [ord|&+[v[i]*bas[i]: i in [1..4]]:v in CartesianPower({-bd..bd},4)];
+  poss_a := [x: x in ord_elts|beta[2,2]*x*binv[2,2] in ord];
+  poss_d := [x: x in ord_elts|beta[1,1]*x*binv[1,1] in ord];
+  poss_b := [x: x in ord_elts|beta[2,2]*x*binv[1,1] in ord];
+
+  vprint Clifford, 4: "finished setting up, getting started";
+  while #found_elts lt n_elts do
+    repeat
+      repeat
+        a := Random(poss_a);
+        d := Random(poss_d);
+        b := Random(poss_b);
+      until cl`is_vec(b*cl`star(a)) and cl`is_vec(cl`star(b)*d);
+      vprintf Clifford, 6: ".";
+      ism,c := make_lower_left(cl,ord,beta,a,d,b);
+    until ism;
+    vprint Clifford, 5: "found new matrix";
+    mat := Matrix(2,2,[cl|a,b,c,d]);
+    psl_elt := make_psl2_group_elt(psl,mat);
+    if psl_elt notin found_elts then
+      Include(~found_elts,psl_elt);
+      if #found_elts mod 100 eq 0 then vprint Clifford, 2: "found", #found_elts, "matrices so far"; end if;
+    end if;
+  end while;
+  return found_elts;
+end function;
+
+/*
+wds := [matrix_to_fp_element(psl,i`matrix): i in m1000];
+g := Universe(wds); // what is the relation between this and psl`sl2_fp_group?
+sg := sub<g|wds>;
+Index(g,sg);
+
+bd := 1;
+m1000s := {@@};
+for i in [1..10] do
+  time m1000s := make_random_elts_0(psl,cl,ord,beta,bd+i,1000*i: found_elts := m1000s);
+  SetOutputFile("/dev/null");
+  wds := [matrix_to_fp_element(psl,i`matrix): i in m1000s];
+  UnsetOutputFile();                                       
+  sg := sub<g|wds>; 
+  time Index(g,sg);
+end for;
+*/
+
+function make_random_elts_old(psl,cl,ord,beta,bd,n_elts: found_elts := {@@})
+  binv := beta^-1;
+  ord_elts := [ord|[r,s,t,u]: r,s,t,u in [-bd..bd]];
+  poss_a := [x: x in ord_elts|beta[2,2]*x*binv[2,2] in ord];
+  poss_d := [x: x in ord_elts|beta[1,1]*x*binv[1,1] in ord];
+  poss_b := [x: x in ord_elts|beta[2,2]*x*binv[1,1] in ord];
+  found_elts := {@@};
+  
+  vprint Clifford, 5: "finished setting up, getting started";
+  while #found_elts lt n_elts do
+    repeat
+      repeat
+        a := Random(poss_a);
+        d := Random(poss_d);
+        b := Random(poss_b);
+      until cl`is_vec(b*cl`star(a)) and cl`is_vec(cl`star(b)*d);
+      vprintf Clifford, 6: ".";
+      ism,c := make_lower_left(cl,ord,beta,a,d,b);
+    until ism;
+    vprint Clifford, 4: "found new matrix";
+    mat := Matrix(2,2,[cl|a,b,c,d]);
+    psl_elt := make_psl2_group_elt(psl,mat);
+    if psl_elt notin found_elts then
+      Include(~found_elts,psl_elt);
+      if #found_elts mod 100 eq 0 then vprint Clifford, 2: "found", #found_elts, "matrices so far"; end if;
+    end if;
+  end while;
+  return found_elts;
+end function;
+
+/*
+AttachSpec("hecke.spec");
+cl := clifford_algebra(3,Q);
+ord := get_maximal_orders(cl)[1];
+psl := clifford_bianchi_group(ord);
+beta := Matrix(2,2,[cl|1+cl.2+cl.3,0,0,1-cl.2-cl.3]); 
+i := 0;
+G := psl`sl2_fp_group;   
+repeat
+  time g1,g1map,elts1 := Gamma0_fp(psl,beta: num_rels := 2^i*40000, batch_size := 2*i^2500, len := 30+10*i);
+until Index(G,g1) eq 40;
+prods := [&*[psl`sl2quo_to_mat[G.i]: i in [0] cat Eltseq(G!g1.j)]: j in [1..Ngens(g1)]];
+inds := {@Index(prods,i): i in prods@};
+g1s := sub<G|[g1.i: i in inds]>;
+ht := func<x|Max([AbsoluteValue(i): i in Eltseq(r), r in Eltseq(x)])>;
+// we find that it can be generated by elements of height at most 1
+
+time m1000 := make_random_elts_0(psl,cl,ord,beta,2,1000); // 30 seconds
+SetOutputFile("/dev/null");
+wds := [matrix_to_fp_element(psl,i`matrix): i in m1000];
+UnsetOutputFile();                                       
+g := Universe(wds); // how is this related to G?
+sg := sub<g|wds>; // actually got 40 the first time
+*/
+
+
+///////////////
+intrinsic stabilizer_infty(SL2O::GrpPSL2Cliff)->GrpFP,Map,Setq
+///////////////
+{Return the stabilizer of infinity as a finitely presented group (as a subgroup of SL2(O)) and a map to the finitely presented version of PSL2(O) with its generators as matrices.}
+    O:=clifford_order(SL2O);
+    psl2_quo:=fp_group(SL2O);
+    sl2_infty,gens_infty:=stabilizer_infty(O);
+    gens_infty_fp:=[matrix_to_fp_element(SL2O,g) : g in gens_infty];
+    stab_to_psl2:=hom<sl2_infty->psl2_quo|gens_infty_fp>;
+    return sl2_infty,stab_to_psl2,gens_infty;
 end intrinsic;
