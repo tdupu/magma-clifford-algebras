@@ -1,4 +1,4 @@
-AttachSpec("hecke.spec");
+AttachSpec("cliff.spec");
 SetVerbose("LMFDB",4);
 SetLMFDBRootFolder(".");
 Z:=Integers();

@@ -1,6 +1,6 @@
 Z:=Integers();
 Q:=Rationals();
-AttachSpec("hecke.spec");
+AttachSpec("cliff.spec");
 SetVerbose("Clifford",1);
 SetLMFDBRootFolder(".");
 
