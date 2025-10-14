@@ -1,5 +1,4 @@
 package-cliff.mag
-package-coset-table.mag
 package-cusp.mag
 package-grpcliff.mag
 package-modular-symbols.mag
