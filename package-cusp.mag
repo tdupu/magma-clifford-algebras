@@ -754,15 +754,15 @@ intrinsic elt(H::SpcHypCliff, eltseq::SeqEnum[RngElt]) -> SpcHypCliffElt
     N:=dimension(H);
 
     require #eltseq eq N: "The number of elements in the sequence is not of the correct dimension.";
-    require eltseq[N] ge 0: "eltseq must have a non-negative height.";
     
     //AN:=affine_space(H);
     
     pt := New(SpcHypCliffElt);
     pt`parent:=H;
     pt`vector:=Vector(eltseq);
-    //pt`vector:=AN(Qbar)!eltseq;
     pt`is_infinite:=false;
+    
+    require Eltseq(real_algebraic_point(pt))[N] ge 0: "eltseq must have a non-negative height.";
     
     return pt;
 end intrinsic;
