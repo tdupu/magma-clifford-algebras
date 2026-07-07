@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "magma_clifford_algebras",
+  "project_id": "bdafcfee-f8e3-4377-9bbf-e1e426753046"
+}
