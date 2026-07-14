@@ -1,7 +1,9 @@
 {
   "database": "dolt",
   "backend": "dolt",
-  "dolt_mode": "embedded",
+  "dolt_mode": "server",
   "dolt_database": "magma_clifford_algebras",
-  "project_id": "bdafcfee-f8e3-4377-9bbf-e1e426753046"
+  "project_id": "bdafcfee-f8e3-4377-9bbf-e1e426753046",
+  "dolt_server_host": "127.0.0.1",
+  "dolt_server_port": 3309
 }
